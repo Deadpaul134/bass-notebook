@@ -1,5 +1,5 @@
 /* Bass Notebook service worker — cache-first, relative to the page directory. */
-var CACHE_VERSION = "bass-notebook-v1";
+var CACHE_VERSION = "bass-notebook-v2";
 var ASSETS = [
   "./",
   "./index.html",
@@ -8,14 +8,18 @@ var ASSETS = [
   "./css/app.css",
   "./js/data.js",
   "./js/music.js",
+  "./js/model.js",
+  "./js/layout.js",
   "./js/render.js",
   "./js/history.js",
-  "./js/pen.js",
-  "./js/tap.js",
+  "./js/playback.js",
+  "./js/musicxml.js",
   "./js/export.js",
+  "./js/editor.js",
   "./js/app.js",
   "./vendor/vexflow/vexflow-bravura.js",
-  "./vendor/perfect-freehand/perfect-freehand.js",
+  "./vendor/jspdf/jspdf.umd.min.js",
+  "./vendor/svg2pdf/svg2pdf.umd.min.js",
   "./assets/fonts/heebo-hebrew.woff2",
   "./assets/fonts/heebo-latin.woff2",
   "./assets/fonts/OFL.txt",

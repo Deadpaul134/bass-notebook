@@ -2,7 +2,7 @@
   "name": "bass-notebook",
   "private": true,
   "version": "1.0.0",
-  "description": "מחברת תווים לטאבלט אנדרואיד — עט והקשה, במצב לא מקוון",
+  "description": "מחברת תווים חינמית לטאבלט — משך, הקשה, השמעה וייצוא, במצב לא מקוון",
   "scripts": {
     "start": "python3 tools/serve.py 4173",
     "test": "playwright test",

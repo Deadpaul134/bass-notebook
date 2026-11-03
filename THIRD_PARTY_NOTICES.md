@@ -8,7 +8,8 @@ No GPL, LGPL, AGPL, or CC BY-SA code or fonts are included.
 |---|---|---|---|
 | VexFlow | 4.2.3 (`build/cjs/vexflow-bravura.js`, git `62087494cafd5bf226201aab96c90a747c05a52c`) | MIT | https://github.com/0xfe/vexflow/blob/4.2.3/LICENSE — identical to the MIT text in the npm package `vexflow@4.2.3` |
 | Bravura (embedded in that VexFlow build) | 1.392 | SIL Open Font License 1.1 | VexFlow tag 4.2.3 `tools/fonts/@/bravura/LICENSE.txt` (next to `Bravura_1.392.otf`) and https://github.com/steinbergmedia/bravura/blob/bravura-1.392/redist/OFL.txt |
-| perfect-freehand | 1.2.3 | MIT | https://github.com/steveruizok/perfect-freehand/blob/v1.2.3/LICENSE — identical to `perfect-freehand@1.2.3` on npm |
+| jsPDF | 2.5.2 | MIT | https://github.com/parallax/jsPDF/blob/v2.5.2/LICENSE — identical to `vendor/jspdf/LICENSE` |
+| svg2pdf.js | 2.2.4 | MIT | https://github.com/yWorks/svg2pdf.js/blob/v2.2.4/LICENSE — identical to `vendor/svg2pdf/LICENSE` |
 | Heebo | variable font, Google Fonts v28 (hebrew + latin subsets) | SIL Open Font License 1.1 | https://github.com/google/fonts/blob/main/ofl/heebo/OFL.txt — copyright line matches `@fontsource/heebo@5.3.0` LICENSE |
 
 Bravura is not shipped as a separate font file. VexFlow 4.2.3 embeds glyph outlines generated from `Bravura_1.392.otf`. The OFL still applies to those outlines. The VexFlow copy of the notice is dated 2019; the upstream tag `bravura-1.392` notice is dated 2015. Both are SIL OFL 1.1 with Reserved Font Name "Bravura". Both notices are reproduced below.
@@ -243,14 +244,49 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
 
-## perfect-freehand — MIT
+## jsPDF — MIT
 
-Source: https://github.com/steveruizok/perfect-freehand/blob/v1.2.3/LICENSE
+Source: https://github.com/parallax/jsPDF/blob/v2.5.2/LICENSE
+
+Checked on 2026-11-03: the file at tag `v2.5.2` is identical to `vendor/jspdf/LICENSE`.
 
 ```
-MIT License
+Copyright
+(c) 2010-2021 James Hall, https://github.com/MrRio/jsPDF
+(c) 2015-2021 yWorks GmbH, https://www.yworks.com/
 
-Copyright (c) 2021 Stephen Ruiz Ltd
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+## svg2pdf.js — MIT
+
+Source: https://github.com/yWorks/svg2pdf.js/blob/v2.2.4/LICENSE
+
+Checked on 2026-11-03: the file at tag `v2.2.4` is identical to `vendor/svg2pdf/LICENSE`.
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2015-2023 yWorks GmbH
+Copyright (c) 2013-2015 by Vitaly Puzrin
+
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

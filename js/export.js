@@ -1,184 +1,133 @@
-/* Bass Notebook — JSON backup and PNG export. */
+/* PNG, PDF, and JSON backup. */
 (function () {
   "use strict";
   var BN = (window.BN = window.BN || {});
 
-  function stamp() {
-    return BN.ymd();
+  function safe(name) {
+    return String(name || "score").replace(/[\\/:*?"<>|]+/g, " ").trim() || "score";
   }
 
-  function safeName(title) {
-    var name = String(title || "page").replace(/[\\/:*?"<>|]+/g, " ").trim();
-    return name || "page";
+  function filename(score, ext) {
+    return safe(score.title) + "_" + (score.date || "score") + "." + ext;
+  }
+
+  function renderSvg(score, width) {
+    var host = document.createElement("div");
+    host.style.cssText = "position:fixed;left:-4000px;top:0;width:" + width + "px;background:#fffdf9;";
+    document.body.appendChild(host);
+    BN.render.draw(score, host, { width: width, colors: { text: "#3b2f28", staff: "#8a7868", accent: "#de7a60" } });
+    return host;
+  }
+
+  function loadSvg(svg) {
+    var box = svg.viewBox && svg.viewBox.baseVal;
+    if (box && box.width) {
+      svg.setAttribute("width", String(box.width));
+      svg.setAttribute("height", String(box.height));
+    }
+    var xml = new XMLSerializer().serializeToString(svg);
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      var url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml" }));
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("png")); };
+      img.src = url;
+    });
+  }
+
+  function svgToPng(score) {
+    var host = renderSvg(score, 1000);
+    var svgs = Array.prototype.slice.call(host.querySelectorAll("svg"));
+    return Promise.all(svgs.map(loadSvg)).then(function (images) {
+      var canvas = document.createElement("canvas");
+      canvas.width = 2000;
+      var head = 150;
+      var rows = images.map(function (img) {
+        var h = Math.max(80, Math.round(2000 * (img.height / Math.max(1, img.width))));
+        return { img: img, h: h };
+      });
+      canvas.height = head + rows.reduce(function (sum, row) { return sum + row.h; }, 0) + 40;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fffdf9";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#3b2f28";
+      ctx.font = "600 54px Heebo, sans-serif";
+      ctx.direction = "rtl";
+      ctx.textAlign = "right";
+      ctx.fillText(score.title || "", canvas.width - 40, 70);
+      ctx.font = "32px Heebo, sans-serif";
+      ctx.fillText((score.date || "") + "   quarter=" + score.tempo.bpm, canvas.width - 40, 120);
+      var y = head;
+      rows.forEach(function (row) {
+        ctx.drawImage(row.img, 0, y, canvas.width, row.h);
+        y += row.h;
+      });
+      host.remove();
+      if (document.getElementById("score")) BN.editor.redraw();
+      return new Promise(function (resolve) { canvas.toBlob(function (blob) { resolve(blob); }, "image/png"); });
+    }).catch(function (err) {
+      host.remove();
+      throw err;
+    });
+  }
+
+  function pdfBlob(score) {
+    var host = renderSvg(score, 700);
+    var svg = host.querySelector("svg");
+    var box = svg && svg.viewBox && svg.viewBox.baseVal;
+    if (svg && box && box.width) {
+      svg.setAttribute("width", String(box.width));
+      svg.setAttribute("height", String(box.height));
+    }
+    var jsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDF) { host.remove(); return Promise.reject(new Error("pdf")); }
+    var doc = new jsPDF({ unit: "mm", format: "a4" });
+    doc.setFontSize(16);
+    doc.text(score.title || "", 200, 16, { align: "right" });
+    doc.setFontSize(11);
+    doc.text((score.date || "") + "  quarter = " + score.tempo.bpm, 200, 24, { align: "right" });
+    var draw = doc.svg ? doc.svg(svg, { x: 10, y: 32, width: 190 }) : Promise.resolve();
+    return Promise.resolve(draw).then(function () {
+      host.remove();
+      if (document.getElementById("score")) BN.editor.redraw();
+      return doc.output("blob");
+    }).catch(function () {
+      host.remove();
+      return doc.output("blob");
+    });
   }
 
   BN.export = {
-    toJSON: function (pages) {
-      var list = pages || BN.store.all();
-      return {
-        app: "bass-notebook",
-        v: 1,
-        exportedAt: new Date().toISOString(),
-        pages: JSON.parse(JSON.stringify(list))
-      };
+    filename: filename,
+    toJSON: function (scores) {
+      return { app: "bass-notebook", v: 2, exportedAt: new Date().toISOString(), scores: JSON.parse(JSON.stringify(scores || BN.store.all())) };
     },
-
     validate: function (obj) {
-      if (!obj || typeof obj !== "object" || obj.app !== "bass-notebook" || obj.v !== 1 || !Array.isArray(obj.pages)) {
-        var err = new Error("הקובץ אינו גיבוי תקין של מחברת בס");
-        err.hebrew = true;
-        throw err;
-      }
-      obj.pages.forEach(function (page) {
-        if (!page || !page.id || !Array.isArray(page.systems)) {
-          throw new Error("הקובץ פגום: נמצא דף בלי מבנה");
-        }
-      });
+      if (!obj || obj.app !== "bass-notebook" || (obj.v !== 1 && obj.v !== 2)) throw new Error("הקובץ אינו גיבוי תקין של מחברת בס");
+      if (obj.v === 1 && !Array.isArray(obj.pages)) throw new Error("הקובץ פגום");
+      if (obj.v === 2 && !Array.isArray(obj.scores)) throw new Error("הקובץ פגום");
       return obj;
     },
-
-    mergePages: function (current, incoming) {
-      var map = new Map();
-      current.forEach(function (page) {
-        map.set(page.id, page);
-      });
-      incoming.forEach(function (page) {
-        var prev = map.get(page.id);
-        var next = BN.migrate(JSON.parse(JSON.stringify(page)));
-        if (!prev || String(next.updatedAt || "") > String(prev.updatedAt || "")) map.set(next.id, next);
-      });
-      return Array.from(map.values());
-    },
-
     importData: function (obj, mode) {
       var data = BN.export.validate(obj);
-      var pages = data.pages.map(function (page) {
-        return BN.migrate(JSON.parse(JSON.stringify(page)));
+      var incoming = data.v === 1 ? data.pages.map(BN.model.migrateV1) : data.scores.map(function (s) { return JSON.parse(JSON.stringify(s)); });
+      if (mode === "replace") return BN.store.replaceAll(incoming);
+      var map = new Map();
+      BN.store.all().forEach(function (s) { map.set(s.id, s); });
+      incoming.forEach(function (s) {
+        var prev = map.get(s.id);
+        if (!prev || String(s.updatedAt || "") > String(prev.updatedAt || "")) map.set(s.id, s);
       });
-      if (mode === "replace") return BN.store.replaceAll(pages).then(function () { return pages.length; });
-      var merged = BN.export.mergePages(BN.store.all(), pages);
-      return BN.store.replaceAll(merged).then(function () { return pages.length; });
+      return BN.store.replaceAll(Array.from(map.values()));
     },
-
-    filename: function (page) {
-      return "bass-notebook_" + safeName(page.title) + "_" + (page.date || stamp()) + ".png";
-    },
-
-    backupName: function () {
-      return "bass-notebook-backup-" + stamp() + ".json";
-    },
-
-    pngBlob: function (page) {
-      return new Promise(function (resolve, reject) {
-        var fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
-        fontsReady.then(function () {
-        var host = document.createElement("div");
-        host.className = "export-host";
-        host.style.cssText = "position:fixed;left:-4000px;top:0;width:1000px;background:#fffdf9;";
-        document.body.appendChild(host);
-        var score = document.createElement("div");
-        host.appendChild(score);
-        var layout;
-        try {
-          layout = BN.render.draw(page, score, { light: true });
-        } catch (err) {
-          host.remove();
-          reject(err);
-          return;
-        }
-        var svg = score.querySelector("svg");
-        var width = 2000;
-        var logicalH = layout.logicalH;
-        var height = Math.round((logicalH / 1000) * width);
-        var canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        var ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#fffdf9";
-        ctx.fillRect(0, 0, width, height);
-        ctx.fillStyle = "#3b2f28";
-        ctx.font = "600 54px Heebo, sans-serif";
-        ctx.direction = "rtl";
-        ctx.textAlign = "right";
-        ctx.fillText(page.title || "רעיון", width - 48, 78);
-        ctx.font = "400 32px Heebo, sans-serif";
-        ctx.fillStyle = "#5c4b40";
-        var tempo = page.tempo ? "  ·  ♩=" + page.tempo : "";
-        ctx.fillText((page.date || "") + "   " + (page.key || "C") + "   " + (page.time || "4/4") + tempo, width - 48, 124);
-
-        var xml = new XMLSerializer().serializeToString(svg);
-        var blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
-        var url = URL.createObjectURL(blob);
-        var img = new Image();
-        img.onload = function () {
-          var headerPx = Math.round((layout.headerLogical / 1000) * width);
-          var scoreH = Math.round((layout.userH / layout.userW) * width);
-          ctx.drawImage(img, 0, headerPx, width, scoreH);
-          (page.strokes || []).forEach(function (stroke) {
-            if (!stroke.points || stroke.points.length < 2 || !BN.getStroke) return;
-            var sx = width / 1000;
-            var sy = height / logicalH;
-            var sim = stroke.points.every(function (p) {
-              return p[2] == null || p[2] === 0 || p[2] === 0.5;
-            });
-            var size = (stroke.size || 6) * (stroke.tool === "highlighter" ? 2.4 : 1.35) * sx;
-            var outline = BN.getStroke(
-              stroke.points.map(function (p) {
-                return [p[0] * sx, p[1] * sy, p[2] == null ? 0.5 : p[2]];
-              }),
-              { size: size, thinning: 0.65, smoothing: 0.5, streamline: 0.45, simulatePressure: sim, last: true }
-            );
-            if (!outline.length) return;
-            ctx.beginPath();
-            outline.forEach(function (pt, i) {
-              if (i === 0) ctx.moveTo(pt[0], pt[1]);
-              else ctx.lineTo(pt[0], pt[1]);
-            });
-            ctx.closePath();
-            var color = stroke.color === "accent" ? "#de7a60" : stroke.color === "blue" ? "#3d6fa8" : stroke.color === "green" ? "#5f9f7c" : "#3b2f28";
-            ctx.globalAlpha = stroke.tool === "highlighter" ? 0.38 : 1;
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.globalAlpha = 1;
-          });
-          URL.revokeObjectURL(url);
-          host.remove();
-          if (BN.render && document.getElementById("score")) {
-            /* caller redraws the live page */
-          }
-          canvas.toBlob(function (out) {
-            resolve(out);
-          }, "image/png");
-        };
-        img.onerror = function () {
-          URL.revokeObjectURL(url);
-          host.remove();
-          reject(new Error("png"));
-        };
-        img.src = url;
-        }).catch(reject);
-      });
-    },
-
-    thumb: function (page) {
-      return BN.export.pngBlob(page).then(function (blob) {
-        return new Promise(function (resolve) {
-          var reader = new FileReader();
-          reader.onload = function () {
-            var img = new Image();
-            img.onload = function () {
-              var c = document.createElement("canvas");
-              c.width = 480;
-              c.height = Math.round((img.height / img.width) * 480);
-              var ctx = c.getContext("2d");
-              ctx.drawImage(img, 0, 0, c.width, c.height);
-              resolve(c.toDataURL("image/png", 0.7));
-            };
-            img.src = reader.result;
-          };
-          reader.readAsDataURL(blob);
-        });
-      });
+    pngBlob: svgToPng,
+    pdfBlob: pdfBlob,
+    download: function (blob, name) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
     }
   };
 })();

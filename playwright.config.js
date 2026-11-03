@@ -10,7 +10,10 @@ module.exports = defineConfig({
   workers: process.env.CI ? 2 : undefined,
   use: {
     baseURL: "http://127.0.0.1:4173",
-    trace: "on-first-retry"
+    trace: "on-first-retry",
+    launchOptions: {
+      args: ["--autoplay-policy=no-user-gesture-required"]
+    }
   },
   webServer: {
     command: "python3 tools/serve.py 4173",

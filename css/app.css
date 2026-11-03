@@ -368,6 +368,90 @@ h1, h2 { margin: 0; font-weight: 800; }
   .fab { inset-inline-start: 50%; transform: translateX(50%); }
 }
 
+.palette {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.palette button {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  flex: 0 0 auto;
+  border-radius: 16px;
+  border: 1px solid var(--line2);
+  background: var(--card2);
+  font-weight: 800;
+  font-size: 22px;
+}
+.palette button[aria-pressed="true"], .rail button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.new-menu {
+  position: fixed;
+  bottom: 84px;
+  inset-inline-start: 18px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.new-menu button {
+  min-height: var(--tap);
+  min-width: 160px;
+  border-radius: 16px;
+  border: 1px solid var(--line2);
+  background: var(--card);
+  font-weight: 800;
+}
+#score { width: 100%; background: var(--paper); }
+#score .vf-clef path,
+#score .vf-timesignature path,
+#score .vf-keysignature path {
+  fill: var(--text);
+  stroke: var(--text);
+}
+#score .vf-stavebarline path,
+#score .vf-stavebarline line {
+  fill: var(--staff-line) !important;
+  stroke: var(--staff-line) !important;
+}
+#score .vf-stave path,
+#score .vf-stave line {
+  stroke: var(--staff-line);
+}
+.system { background: var(--paper); position: relative; }
+.tempo-label {
+  position: absolute;
+  top: 4px;
+  left: 16px;
+  font-weight: 800;
+  color: var(--text);
+  direction: ltr;
+}
+#cursor {
+  position: fixed;
+  width: 2px;
+  height: 96px;
+  background: var(--accent);
+  z-index: 8;
+  pointer-events: none;
+}
+.tempo-live { display: flex; align-items: center; justify-content: space-between; gap: 4px; font-weight: 800; }
+html { touch-action: manipulation; }
+#toasts { bottom: 88px; }
+
+@media print {
+  .palette, .rail, .top, .chips, .fab, #toasts, #pop { display: none !important; }
+  .editor, .stage { height: auto; overflow: visible; }
+  #score { background: #fffdf9; color: #3b2f28; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

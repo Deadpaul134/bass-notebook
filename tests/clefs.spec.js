@@ -1,66 +1,72 @@
 const { test, expect } = require("@playwright/test");
-const { freshApp, newPage, tapStaff, model } = require("./helpers");
+const { freshApp, newScore, tapStaff, getModel, written } = require("./helpers");
 
-async function pitches(page) {
-  return page.evaluate(() => {
-    const out = [];
-    BN.app.getPage().systems.forEach((sys) => {
-      sys.staves.forEach((staff) => {
-        staff.measures.forEach((measure) => {
-          measure.events.forEach((ev) => out.push(ev.pitch || null));
-        });
-      });
-    });
-    return out;
-  });
-}
-
-test("bass, treble, grand map the named positions and keep pitch", async ({ page }) => {
+test("a new idea opens in bass, 4/4, C, tempo 100", async ({ page }) => {
   await freshApp(page);
-  await newPage(page);
-  await tapStaff(page, 0, 0, 0, 0);
-  await tapStaff(page, 0, 0, 1, 0);
-  await tapStaff(page, 0, 0, 8, 1);
-  await tapStaff(page, 0, 0, 10, 1);
-  await tapStaff(page, 0, 0, -9, 2);
-  let got = await pitches(page);
-  expect(got[0]).toMatchObject({ step: "G", oct: 2 });
-  expect(got[1]).toMatchObject({ step: "A", oct: 2 });
-  expect(got[2]).toMatchObject({ step: "A", oct: 3 });
-  expect(got[3]).toMatchObject({ step: "C", oct: 4 });
-  expect(got[4]).toMatchObject({ step: "E", oct: 1 });
+  await newScore(page);
+  const score = await getModel(page);
+  const today = new Date();
+  const ymd = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+  expect(score.staffLayout).toBe("bass");
+  expect(score.tempo.bpm).toBe(100);
+  expect(score.date).toBe(ymd);
+  expect(score.parts[0].measures[0].attributes.time).toEqual({ beats: 4, beatType: 4 });
+  expect(score.parts[0].measures[0].attributes.key).toMatchObject({ fifths: 0, mode: "major" });
+  expect(await page.evaluate(() => BN.render.stepPx(0, 1))).toBeGreaterThanOrEqual(12);
+});
 
-  await page.click("[data-chip='clef']");
-  await page.click("[data-clef='treble']");
-  await page.click("[data-action='apply-clef-all']");
-  await expect(page.locator("svg .vf-brace")).toHaveCount(0);
-  const kept = await model(page);
-  expect(kept.systems[0].staves[0].clef).toBe("treble");
-  expect(kept.systems[0].staves[0].measures[0].events[0].pitch).toMatchObject({ step: "G", oct: 2 });
-  const pos = await page.evaluate(() => BN.music.pitchToPos("treble", { step: "A", oct: 2 }));
-  expect(pos).toBe(-11);
+test("bass and treble landmarks, and grand keeps both staves", async ({ page }) => {
+  await freshApp(page);
+  await newScore(page);
+  await tapStaff(page, { staff: 1, measure: 0, pos: 0, slot: "end" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: 8, slot: "end" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: 10, slot: "end" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: -9, slot: "end" });
+  let pitches = written(await getModel(page)).map((note) => note.pitch.step + note.pitch.octave);
+  expect(pitches).toEqual(["G2", "A3", "C4", "E1"]);
 
-  await page.evaluate(() => BN.store.replaceAll([]));
-  await page.evaluate(() => BN.data.saveSettings({ clef: "treble" }));
   await page.click("[data-action='back']");
-  await page.waitForSelector("[data-action='new-page']");
-  await newPage(page);
-  await tapStaff(page, 0, 0, 0, 0);
-  await tapStaff(page, 0, 0, 8, 0);
-  await tapStaff(page, 0, 0, -2, 1);
-  got = await pitches(page);
-  expect(got.map((p) => p.step + p.oct)).toEqual(["E4", "F5", "C4"]);
+  await newScore(page, { layout: "treble" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: 0, slot: "end" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: -2, slot: "end" });
+  pitches = written(await getModel(page)).map((note) => note.pitch.step + note.pitch.octave);
+  expect(pitches).toEqual(["E4", "C4"]);
 
+  await page.click("[data-action='back']");
+  await newScore(page, { layout: "grand" });
+  await tapStaff(page, { staff: 2, measure: 0, pos: 0, slot: "end" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: 4, slot: "end" });
+  const notes = written(await getModel(page));
+  expect(notes.some((note) => note.staff === 2 && note.pitch.step === "G" && note.pitch.octave === 2)).toBe(true);
+  expect(notes.some((note) => note.staff === 1 && note.pitch.octave >= 4)).toBe(true);
+  const mapped = await page.evaluate(() => {
+    function probe(staff, pos) {
+      const point = BN.render.locate({ staff: staff, measure: 0, pos: pos, slot: "end" });
+      return BN.render.hit(BN.state.current, point.x, point.y);
+    }
+    return { treble: probe(1, -2), bass: probe(2, 10) };
+  });
+  expect(mapped.treble).toMatchObject({ staff: 1, pos: -2 });
+  expect(mapped.bass).toMatchObject({ staff: 2, pos: 10 });
+  const svg = await page.locator("#score svg").first().innerHTML();
+  expect(svg.toLowerCase()).toContain("brace");
+});
+
+test("leaving the grand staff asks before dropping notes", async ({ page }) => {
+  await freshApp(page);
+  await newScore(page, { layout: "grand" });
+  await tapStaff(page, { staff: 1, measure: 0, pos: 0, slot: "end" });
+  page.once("dialog", (dialog) => dialog.dismiss());
   await page.click("[data-chip='clef']");
-  await page.click("[data-clef='grand']");
-  await page.click("[data-action='apply-clef-all']");
-  await expect(page.locator("svg .vf-brace").first()).toBeVisible();
-  await tapStaff(page, 0, 0, -2, 2);
-  await tapStaff(page, 0, 1, 10, 2);
-  const pageModel = await model(page);
-  const top = pageModel.systems[0].staves[0].measures[2].events.at(-1);
-  const bottom = pageModel.systems[0].staves[1].measures[2].events.at(-1);
-  expect(top.pitch).toMatchObject({ step: "C", oct: 4 });
-  expect(bottom.pitch).toMatchObject({ step: "C", oct: 4 });
-  expect(pageModel.systems[0].layout).toBe("grand");
+  await page.click("[data-set-layout='bass']");
+  expect((await getModel(page)).staffLayout).toBe("grand");
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toContain("יימחקו");
+    dialog.accept();
+  });
+  await page.click("[data-chip='clef']");
+  await page.click("[data-set-layout='bass']");
+  const score = await getModel(page);
+  expect(score.staffLayout).toBe("bass");
+  expect(written(score).some((note) => note.staff === 1 && note.pitch && note.pitch.octave >= 4)).toBe(false);
 });
