@@ -30,8 +30,9 @@ jobs:
           if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
             git worktree add /tmp/ghp origin/gh-pages
           else
-            mkdir -p /tmp/ghp
-            git -C /tmp/ghp init -b gh-pages
+            git worktree add --detach /tmp/ghp
+            git -C /tmp/ghp checkout --orphan gh-pages
+            find /tmp/ghp -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           fi
           # Keep pull-request previews. Replace only the site root.
           find /tmp/ghp -mindepth 1 -maxdepth 1 ! -name pr-preview ! -name .git -exec rm -rf {} +
