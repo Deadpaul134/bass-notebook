@@ -1,0 +1,43 @@
+name: Pages
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: pages-main
+  cancel-in-progress: true
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish the site root on this repository only
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/site
+          mkdir -p /tmp/site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'tests' \
+            --exclude 'test-results' \
+            --exclude 'playwright-report' \
+            ./ /tmp/site/
+          git fetch origin gh-pages || true
+          rm -rf /tmp/ghp
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add /tmp/ghp origin/gh-pages
+          else
+            mkdir -p /tmp/ghp
+            git -C /tmp/ghp init -b gh-pages
+          fi
+          # Keep pull-request previews. Replace only the site root.
+          find /tmp/ghp -mindepth 1 -maxdepth 1 ! -name pr-preview ! -name .git -exec rm -rf {} +
+          rsync -a /tmp/site/ /tmp/ghp/
+          touch /tmp/ghp/.nojekyll
+          git -C /tmp/ghp add -A
+          git -C /tmp/ghp -c user.name="Deadpaul134" -c user.email="166498949+Deadpaul134@users.noreply.github.com" \
+            commit -m "chore: publish site" || true
+          git -C /tmp/ghp push origin HEAD:gh-pages

@@ -1,0 +1,64 @@
+name: Preview
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish preview on this repository only
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PR}" ]; then PR="manual"; fi
+          DEST="pr-preview/pr-${PR}"
+          rm -rf /tmp/site
+          mkdir -p /tmp/site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'tests' \
+            --exclude 'test-results' \
+            --exclude 'playwright-report' \
+            ./ /tmp/site/
+          git fetch origin gh-pages || true
+          rm -rf /tmp/ghp
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add /tmp/ghp origin/gh-pages
+          else
+            mkdir -p /tmp/ghp
+            git -C /tmp/ghp init -b gh-pages
+          fi
+          mkdir -p "/tmp/ghp/${DEST}"
+          rsync -a --delete /tmp/site/ "/tmp/ghp/${DEST}/"
+          touch /tmp/ghp/.nojekyll
+          git -C /tmp/ghp add -A
+          git -C /tmp/ghp -c user.name="Deadpaul134" -c user.email="166498949+Deadpaul134@users.noreply.github.com" \
+            commit -m "chore: preview pr ${PR}" || true
+          git -C /tmp/ghp push origin HEAD:gh-pages
+      - name: Comment with the preview link
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          URL="https://deadpaul134.github.io/bass-notebook/pr-preview/pr-${PR}/"
+          BODY="תצוגה מקדימה (הריפו הזה בלבד, אחרי ש-Pages מופעל מענף gh-pages): ${URL}"
+          # Update an existing bot comment if one is already on the PR.
+          EXISTING=$(gh api "repos/${REPO}/issues/${PR}/comments" --jq '.[] | select(.user.login=="github-actions[bot]") | .id' | head -n 1 || true)
+          if [ -n "${EXISTING}" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING}" -f body="${BODY}"
+          else
+            gh api "repos/${REPO}/issues/${PR}/comments" -f body="${BODY}"
+          fi
