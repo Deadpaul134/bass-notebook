@@ -207,12 +207,34 @@ h1, h2 { margin: 0; font-weight: 800; }
 .editor-top { margin-bottom: 8px; }
 .title-input {
   flex: 1;
+  min-width: 0;
   min-height: var(--tap);
   border: 0;
   background: transparent;
   font-size: 26px;
   font-weight: 800;
 }
+.top .undo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 96px;
+  min-height: var(--tap);
+  padding: 0 16px;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.top .undo-btn:disabled {
+  background: var(--card);
+  border-color: var(--line2);
+  color: var(--muted);
+}
+.undo-btn .undo-icon { width: 24px; height: 24px; display: block; flex: 0 0 auto; }
+.undo-btn .undo-label { font-size: 18px; font-weight: 800; line-height: 1; }
+.palette button:disabled { color: var(--dim); background: var(--card); }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .chip { padding: 0 14px; background: var(--card2); }
 .editor-body {

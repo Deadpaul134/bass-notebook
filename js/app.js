@@ -109,6 +109,11 @@
   function typeBtn(type, label) {
     return '<button type="button" data-type="' + type + '">' + label + "</button>";
   }
+  function undoButton(enabled) {
+    return '<button type="button" class="icon-btn undo-btn" data-action="undo" aria-label="בטל" title="בטל"' +
+      (enabled ? "" : " disabled") +
+      '><svg class="undo-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg><span class="undo-label">בטל</span></button>';
+  }
   function renderScore(id) {
     var score = BN.store.get(id);
     if (!score) return go("#list");
@@ -118,10 +123,12 @@
     var key = BN.music.vfKey(BN.model.keyOf(score.parts[0], 0));
     var time = BN.model.timeOf(score.parts[0], 0);
     var clef = score.staffLayout === "grand" ? "כפול" : score.staffLayout === "treble" ? "סול" : "פה";
+    var canUndo = BN.history.canUndo(score.id);
     $("#app").innerHTML =
       '<main class="screen editor" data-screen="editor" data-hand="' + BN.esc(BN.data.settings().hand || "right") + '">' +
       '<header class="top"><button type="button" class="icon-btn" data-action="back" aria-label="חזרה">→</button>' +
       '<input id="score-title" class="title-input" value="' + BN.esc(score.title || "") + '" aria-label="כותרת">' +
+      undoButton(canUndo) +
       '<button type="button" class="icon-btn" data-action="play" aria-label="השמעה">▶</button>' +
       '<button type="button" class="icon-btn" data-action="stop" aria-label="עצירה">■</button>' +
       '<button type="button" class="icon-btn" data-action="theme">' + themeLabel() + "</button></header>" +
@@ -146,14 +153,20 @@
       '<button type="button" data-acc="flat">♭</button>' +
       '<button type="button" data-acc="natural">♮</button>' +
       '<button type="button" data-action="delete" aria-label="מחיקה">🗑</button>' +
-      '<button type="button" data-action="undo" aria-label="בטל">↶</button>' +
+      '<button type="button" data-hist="undo" aria-label="בטל" title="בטל"' + (canUndo ? "" : " disabled") + '>↶</button>' +
       '<button type="button" data-action="redo" aria-label="חזור">↷</button>' +
       '<button type="button" data-action="select" aria-label="בחירה">↖</button></div></main>';
     var title = $("#score-title");
     title.addEventListener("input", function () {
-      score.title = title.value;
-      BN.store.schedule(score);
+      if (!BN.state.current) return;
+      if (title.dataset.undoOpen !== "1") {
+        BN.history.exec(BN.state.current, function (current) { current.title = title.value; });
+        title.dataset.undoOpen = "1";
+        if (BN.editor && BN.editor.syncPalette) BN.editor.syncPalette();
+      } else BN.state.current.title = title.value;
+      BN.store.schedule(BN.state.current);
     });
+    title.addEventListener("blur", function () { title.dataset.undoOpen = ""; });
     BN.editor.mount($("#stage"));
     BN.editor.redraw();
     refreshRate();
@@ -173,6 +186,13 @@
     if (clefBtn) clefBtn.textContent = score.staffLayout === "grand" ? "כפול" : score.staffLayout === "treble" ? "סול" : "פה";
     if (bpm) bpm.textContent = String(Math.round(score.tempo.bpm * (BN.state.rate || 1)));
   }
+  BN.syncChrome = function () {
+    refreshChips();
+    var title = $("#score-title");
+    if (!title || !BN.state.current || document.activeElement === title) return;
+    title.value = BN.state.current.title || "";
+    title.dataset.undoOpen = "";
+  };
   function refreshRate() {
     document.querySelectorAll("[data-rate]").forEach(function (btn) {
       btn.setAttribute("aria-pressed", Number(btn.dataset.rate) === rate ? "true" : "false");
