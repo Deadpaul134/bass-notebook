@@ -117,9 +117,11 @@
       document.querySelectorAll("[data-acc]").forEach(function (btn) {
         btn.setAttribute("aria-pressed", btn.dataset.acc === palette().accidental ? "true" : "false");
       });
-      var undo = document.querySelector("[data-action='undo']");
+      var canUndo = BN.state.current ? BN.history.canUndo(BN.state.current.id) : false;
+      document.querySelectorAll("[data-action='undo'], [data-hist='undo']").forEach(function (undo) {
+        undo.disabled = !canUndo;
+      });
       var redo = document.querySelector("[data-action='redo']");
-      if (undo && BN.state.current) undo.disabled = !BN.history.canUndo(BN.state.current.id);
       if (redo && BN.state.current) redo.disabled = !BN.history.canRedo(BN.state.current.id);
     },
     onPlayhead: function (id) {
@@ -147,6 +149,7 @@
       BN.state.current = next;
       BN.store.schedule(next);
       BN.editor.redraw();
+      if (BN.syncChrome) BN.syncChrome();
     },
     redo: function () {
       if (!BN.state.current) return;
@@ -155,6 +158,7 @@
       BN.state.current = next;
       BN.store.schedule(next);
       BN.editor.redraw();
+      if (BN.syncChrome) BN.syncChrome();
     },
     mount: function (root) {
       root.addEventListener("pointerdown", onDown);
@@ -407,7 +411,7 @@
   function recHit() { return null; }
 
   document.addEventListener("click", function (e) {
-    var btn = e.target.closest("[data-type], [data-acc], [data-action='rest'], [data-action='dots'], [data-action='tie'], [data-action='select'], [data-action='delete'], [data-action='undo'], [data-action='redo']");
+    var btn = e.target.closest("[data-type], [data-acc], [data-action='rest'], [data-action='dots'], [data-action='tie'], [data-action='select'], [data-action='delete'], [data-action='undo'], [data-hist='undo'], [data-action='redo']");
     if (!btn || !BN.state.current) return;
     var pal = palette();
     if (btn.dataset.type) {
@@ -456,7 +460,7 @@
       });
       BN.state.selection = [];
     }
-    if (btn.dataset.action === "undo") BN.editor.undo();
+    if (btn.dataset.action === "undo" || btn.dataset.hist === "undo") BN.editor.undo();
     if (btn.dataset.action === "redo") BN.editor.redo();
     BN.editor.syncPalette();
   });
