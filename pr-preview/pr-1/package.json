@@ -1,0 +1,14 @@
+{
+  "name": "bass-notebook",
+  "private": true,
+  "version": "1.0.0",
+  "description": "מחברת תווים לטאבלט אנדרואיד — עט והקשה, במצב לא מקוון",
+  "scripts": {
+    "start": "python3 tools/serve.py 4173",
+    "test": "playwright test",
+    "test:desktop": "playwright test --project=desktop"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.48.2"
+  }
+}
