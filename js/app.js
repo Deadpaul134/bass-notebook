@@ -144,8 +144,14 @@
       '<aside class="rail"><div class="tempo-live"><button type="button" data-action="bpm-down">−</button><span id="bpm">' + score.tempo.bpm + '</span><button type="button" data-action="bpm-up">+</button></div>' +
       '<button type="button" data-rate="0.5">×0.5</button><button type="button" data-rate="0.75">×0.75</button><button type="button" data-rate="1">×1</button>' +
       '<button type="button" data-zoom="out" aria-label="הקטנה">−</button><button type="button" data-zoom="in" aria-label="הגדלה">+</button></aside></div>' +
-      '<div class="palette" id="palette">' +
+      '<div class="palette" id="palette"><div class="palette-main">' +
       typeBtn("whole", "𝅝") + typeBtn("half", "𝅗𝅥") + typeBtn("quarter", "♩") + typeBtn("eighth", "♪") + typeBtn("16th", "16") +
+      '<button type="button" data-hist="undo" aria-label="בטל" title="בטל"' + (canUndo ? "" : " disabled") + '>↶</button>' +
+      '<button type="button" data-action="step-up" aria-label="גובה למעלה" disabled>↑</button>' +
+      '<button type="button" data-action="step-down" aria-label="גובה למטה" disabled>↓</button>' +
+      '<button type="button" data-zoom="out" aria-label="הקטנה">−</button>' +
+      '<button type="button" data-zoom="in" aria-label="הגדלה">+</button>' +
+      '</div><div class="palette-more">' +
       '<button type="button" data-action="rest">𝄽</button>' +
       '<button type="button" data-action="dots">·</button>' +
       '<button type="button" data-action="tie">⁀</button>' +
@@ -153,9 +159,8 @@
       '<button type="button" data-acc="flat">♭</button>' +
       '<button type="button" data-acc="natural">♮</button>' +
       '<button type="button" data-action="delete" aria-label="מחיקה">🗑</button>' +
-      '<button type="button" data-hist="undo" aria-label="בטל" title="בטל"' + (canUndo ? "" : " disabled") + '>↶</button>' +
       '<button type="button" data-action="redo" aria-label="חזור">↷</button>' +
-      '<button type="button" data-action="select" aria-label="בחירה">↖</button></div></main>';
+      '<button type="button" data-action="select" aria-label="בחירה">↖</button></div></div></main>';
     var title = $("#score-title");
     title.addEventListener("input", function () {
       if (!BN.state.current) return;
@@ -449,6 +454,7 @@
         host.style.transformOrigin = "top center";
         host.style.transform = "scale(" + zoom + ")";
       }
+      if (BN.editor && BN.editor.positionSelection) BN.editor.positionSelection();
     }
     if (action === "export-musicxml") exportMusicXml();
     if (action === "export-pdf") exportPdf();
