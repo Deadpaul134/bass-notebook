@@ -1,5 +1,5 @@
 /* Bass Notebook service worker — cache-first, relative to the page directory. */
-var CACHE_VERSION = "bass-notebook-v3";
+var CACHE_VERSION = "bass-notebook-v4";
 var ASSETS = [
   "./",
   "./index.html",
