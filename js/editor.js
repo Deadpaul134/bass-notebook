@@ -4,6 +4,8 @@
   var BN = (window.BN = window.BN || {});
   var pointers = new Map();
   var gesture = 0;
+  var TOUCH_LIFT = 64;
+  var lastTouchAt = 0;
 
   function palette() {
     BN.state.palette = BN.state.palette || { type: "quarter", dots: 0, rest: false, tie: false, accidental: null, select: false };
@@ -64,16 +66,29 @@
 
   function showGhost(x, y, text) {
     var ghost = document.getElementById("ghost");
-    if (!ghost) return;
-    ghost.hidden = false;
-    ghost.style.left = (x + 14) + "px";
-    ghost.style.top = (y - 36) + "px";
-    ghost.textContent = text;
+    var head = document.getElementById("ghost-head");
+    if (ghost) {
+      ghost.hidden = false;
+      ghost.style.left = (x + 18) + "px";
+      ghost.style.top = (y - 48) + "px";
+      ghost.textContent = text;
+    }
+    if (head) {
+      head.hidden = false;
+      head.style.left = x + "px";
+      head.style.top = y + "px";
+    }
   }
 
   function hideGhost() {
     var ghost = document.getElementById("ghost");
+    var head = document.getElementById("ghost-head");
     if (ghost) ghost.hidden = true;
+    if (head) head.hidden = true;
+  }
+
+  function ignoreEmulatedMouse(e) {
+    return e.pointerType === "mouse" && Date.now() - lastTouchAt < 900;
   }
 
   BN.editor = {
@@ -98,6 +113,7 @@
       }
       BN.editor.lastDrawMs = performance.now() - t0;
       BN.editor.syncPalette();
+      BN.editor.positionSelection();
     },
     syncPalette: function () {
       document.querySelectorAll("[data-type]").forEach(function (btn) {
@@ -120,6 +136,11 @@
       var canUndo = BN.state.current ? BN.history.canUndo(BN.state.current.id) : false;
       document.querySelectorAll("[data-action='undo'], [data-hist='undo']").forEach(function (undo) {
         undo.disabled = !canUndo;
+      });
+      var item = selectedNote();
+      var canNudge = !!(item && item.note && item.note.pitch && !item.note.rest);
+      document.querySelectorAll("[data-action='step-up'], [data-action='step-down']").forEach(function (btn) {
+        btn.disabled = !canNudge;
       });
       var redo = document.querySelector("[data-action='redo']");
       if (redo && BN.state.current) redo.disabled = !BN.history.canRedo(BN.state.current.id);
@@ -161,14 +182,53 @@
       if (BN.syncChrome) BN.syncChrome();
     },
     mount: function (root) {
-      root.addEventListener("pointerdown", onDown);
+      root.addEventListener("pointerdown", onDown, { passive: false });
       root.addEventListener("pointermove", onMove);
       root.addEventListener("pointerup", onUp);
       root.addEventListener("pointercancel", onCancel);
+      root.addEventListener("touchmove", function (e) {
+        if (pointers.size === 1) e.preventDefault();
+      }, { passive: false });
+      root.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+      root.addEventListener("scroll", function () { BN.editor.positionSelection(); }, { passive: true });
       if (!BN.editor._keys) {
         document.addEventListener("keydown", onKey);
+        window.addEventListener("resize", function () { BN.editor.positionSelection(); });
         BN.editor._keys = true;
       }
+    },
+    touchLift: TOUCH_LIFT,
+    aimPos: function (hit, pointerType) {
+      if (!hit) return null;
+      if (pointerType !== "touch") return hit.pos;
+      var step = BN.render.stepPx(hit.measure, hit.staff) || 18;
+      var steps = Math.max(1, Math.round(TOUCH_LIFT / step));
+      return BN.music.clampPos(hit.pos + steps);
+    },
+    positionSelection: function () {
+      var bar = document.getElementById("selection-bar");
+      if (!bar) return;
+      var item = selectedNote();
+      var meta = item && BN.render.layout && BN.render.layout.notes[item.note.id];
+      if (!meta || !meta.svg) {
+        bar.hidden = true;
+        return;
+      }
+      var pt = BN.render.client(meta.svg, meta.x + (meta.w || 0) / 2, meta.pitchY || 0);
+      bar.hidden = false;
+      var width = bar.offsetWidth || 168;
+      var height = bar.offsetHeight || 56;
+      var left = pt.x + 24;
+      if (left + width > window.innerWidth - 8) left = pt.x - width - 16;
+      var top = pt.y - height - 12;
+      if (top < 8) top = pt.y + 20;
+      var palette = document.getElementById("palette");
+      if (palette) {
+        var bounds = palette.getBoundingClientRect();
+        if (top + height > bounds.top - 4) top = Math.max(8, bounds.top - height - 8);
+      }
+      bar.style.left = Math.max(8, left) + "px";
+      bar.style.top = Math.max(8, top) + "px";
     }
   };
 
@@ -189,38 +249,63 @@
     return pitch.step + (pitch.alter === 1 ? "♯" : pitch.alter === -1 ? "♭" : "") + pitch.octave;
   }
 
+  function withAim(raw, pointerType) {
+    if (!raw) return null;
+    return Object.assign({}, raw, { pos: BN.editor.aimPos(raw, pointerType) });
+  }
+
+  function showPreview(rec) {
+    if (!rec.hit) return;
+    var pt = BN.render.pitchClient(rec.hit);
+    var label = labelFor(rec.pitch);
+    showGhost(pt.x, pt.y, label);
+    if (BN.render.stepPx && BN.render.stepPx(rec.hit.measure, rec.hit.staff) < 12) {
+      var loupe = document.getElementById("loupe");
+      if (loupe) {
+        loupe.hidden = false;
+        loupe.style.left = (pt.x - 130) + "px";
+        loupe.style.top = (pt.y - 110) + "px";
+        loupe.innerHTML = "<b>" + label + "</b>";
+      }
+    }
+  }
+
   function onDown(e) {
+    if (ignoreEmulatedMouse(e)) return;
+    if (e.pointerType === "touch") lastTouchAt = Date.now();
     if (e.target.closest("button, a, input, select, textarea")) return;
-    var rec = { x: e.clientX, y: e.clientY, t: Date.now(), moved: 0 };
+    if (e.pointerType === "touch" && pointers.size === 0) e.preventDefault();
+    var rec = { x: e.clientX, y: e.clientY, t: Date.now(), moved: 0, pointerType: e.pointerType };
     pointers.set(e.pointerId, rec);
     if (pointers.size > gesture) gesture = pointers.size;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
     if (pointers.size >= 2) return;
-    var hit = BN.render.hit(BN.state.current, e.clientX, e.clientY);
-    if (!hit) return;
-    rec.hit = hit;
-    rec.origin = hit;
-    rec.pitch = pitchAt(hit);
-    showGhost(e.clientX, e.clientY, labelFor(rec.pitch));
-    if (BN.render.stepPx && BN.render.stepPx(hit.measure, hit.staff) < 12) {
-      var loupe = document.getElementById("loupe");
-      if (loupe) {
-        loupe.hidden = false;
-        loupe.style.left = (e.clientX - 130) + "px";
-        loupe.style.top = (e.clientY - 110) + "px";
-        loupe.innerHTML = "<b>" + labelFor(rec.pitch) + "</b>";
-      }
-    }
+    var raw = BN.render.hit(BN.state.current, e.clientX, e.clientY);
+    rec.origin = raw;
+    rec.hit = withAim(raw, e.pointerType);
+    if (!rec.hit) return;
+    rec.pitch = pitchAt(rec.hit);
+    showPreview(rec);
+    if (!(rec.origin && rec.origin.noteId)) return;
     rec.timer = setTimeout(function () {
-      if (rec.origin && rec.origin.noteId && rec.moved < 10) {
-        rec.long = true;
-        BN.state.selection = [rec.origin.noteId];
+      if (!rec.origin || !rec.origin.noteId || rec.moved >= 10 || rec.deleted) return;
+      rec.long = true;
+      if (rec.pointerType === "touch") {
+        var id = rec.origin.noteId;
+        rec.deleted = true;
+        hideGhost();
+        commit(function (score) { BN.model.deleteNote(score, id, "rest"); });
+        BN.state.selection = [];
         BN.editor.redraw();
+        return;
       }
-    }, 350);
+      BN.state.selection = [rec.origin.noteId];
+      BN.editor.redraw();
+    }, rec.pointerType === "touch" ? 500 : 350);
   }
 
   function onMove(e) {
+    if (ignoreEmulatedMouse(e) && !pointers.has(e.pointerId)) return;
     var rec = pointers.get(e.pointerId);
     if (!rec) return;
     rec.moved += Math.abs(e.clientX - rec.x) + Math.abs(e.clientY - rec.y);
@@ -230,7 +315,9 @@
       var pts = Array.from(pointers.values());
       if (pts.length >= 2) {
         var dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        var midY = (pts[0].y + pts[1].y) / 2;
         if (rec.pinchDist == null) rec.pinchDist = dist;
+        if (rec.midY == null) rec.midY = midY;
         if (Math.abs(dist - rec.pinchDist) > 28) {
           pts.forEach(function (p) { p.pinch = true; });
           var zoom = BN.state.zoom || 1;
@@ -241,22 +328,27 @@
             host.style.transform = "scale(" + BN.state.zoom + ")";
           }
           rec.pinchDist = dist;
+          BN.editor.positionSelection();
+        } else if (Math.abs(midY - rec.midY) > 3) {
+          var scroller = document.getElementById("stage");
+          if (scroller) scroller.scrollTop -= midY - rec.midY;
+          pts.forEach(function (p) { p.scrolled = true; });
         }
+        rec.midY = midY;
       }
       return;
     }
-    if (!rec.origin) return;
-    var hit = BN.render.hit(BN.state.current, e.clientX, e.clientY);
+    var raw = BN.render.hit(BN.state.current, e.clientX, e.clientY);
+    var hit = withAim(raw, rec.pointerType);
     if (!hit) return;
-    if (rec.origin.noteId) {
+    if (!rec.origin) rec.origin = raw;
+    if (rec.origin && rec.origin.noteId) {
       hit = Object.assign({}, hit, { noteId: rec.origin.noteId, staff: rec.origin.staff, measure: rec.origin.measure, insertAt: 99 });
     }
     rec.hit = hit;
     rec.pitch = pitchAt(hit);
-    if (rec.moved > 8) rec.dragged = true;
-    showGhost(e.clientX, e.clientY, labelFor(rec.pitch));
-    var loupe = document.getElementById("loupe");
-    if (loupe && !loupe.hidden) loupe.innerHTML = "<b>" + labelFor(rec.pitch) + "</b>";
+    if (rec.moved > 14) rec.dragged = true;
+    showPreview(rec);
     if (rec.dragged && rec.pitch && !palette().rest) {
       var midi = BN.music.pitchToMidi(rec.pitch);
       if (midi !== rec.lastMidi) {
@@ -279,9 +371,11 @@
   }
 
   function onUp(e) {
+    if (e.pointerType === "touch") lastTouchAt = Date.now();
     hideGhost();
     var loupe = document.getElementById("loupe");
     if (loupe) loupe.hidden = true;
+    if (ignoreEmulatedMouse(e) && !pointers.has(e.pointerId)) return;
     var rec = pointers.get(e.pointerId);
     pointers.delete(e.pointerId);
     if (rec && rec.timer) clearTimeout(rec.timer);
@@ -290,25 +384,28 @@
     gesture = 0;
     if (fingers >= 3) { BN.editor.redo(); return; }
     if (fingers >= 2) {
-      if (rec && rec.pinch) return;
+      if (rec && (rec.pinch || rec.scrolled)) return;
       BN.editor.undo();
       return;
     }
-    if (!rec || !rec.origin || !rec.hit) return;
-    if (rec.long && rec.moved < 12 && rec.origin.noteId) {
+    if (!rec || !rec.hit) return;
+    if (rec.deleted) return;
+    if (rec.long && rec.pointerType !== "touch" && rec.origin && rec.origin.noteId && rec.moved < 12) {
       BN.state.selection = [rec.origin.noteId];
       BN.editor.redraw();
       return;
     }
-    if (palette().select && rec.origin.noteId && rec.moved < 12) {
+    var tappedNote = rec.origin && rec.origin.noteId && rec.moved < 14 && !rec.dragged;
+    if (tappedNote && (rec.pointerType === "touch" || palette().select)) {
       BN.state.selection = [rec.origin.noteId];
       BN.editor.redraw();
       return;
     }
-    if (palette().select && rec.moved > 16 && !rec.origin.noteId) {
+    if (palette().select && rec.moved > 16 && rec.origin && !rec.origin.noteId) {
       selectRange(rec.origin, rec.hit);
       return;
     }
+    if (!rec.origin && !rec.hit) return;
     place(rec.hit, rec.pitch);
   }
 
@@ -375,14 +472,8 @@
         BN.state.selection = [];
       }
     } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-      var selN = selectedNote();
-      if (!selN || selN.note.rest) return;
       e.preventDefault();
-      var delta = e.key === "ArrowUp" ? 1 : -1;
-      if (e.ctrlKey || e.metaKey) delta *= 7;
-      var pos = BN.music.pitchToPos(clefName(BN.state.current, selN.note.staff), selN.note.pitch) + delta;
-      var pitch = BN.music.posToPitch(clefName(BN.state.current, selN.note.staff), pos, BN.model.keyOf(BN.state.current.parts[0], selN.measureIndex));
-      commit(function (score) { BN.model.replacePitch(score, selN.note.id, pitch); });
+      nudge((e.key === "ArrowUp" ? 1 : -1) * ((e.ctrlKey || e.metaKey) ? 7 : 1));
     } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       var cursor = BN.state.cursor || { staff: 1, measure: contentMeasure(), insertAt: 0 };
@@ -390,6 +481,15 @@
       BN.state.cursor = cursor;
       BN.editor.redraw();
     }
+  }
+
+  function nudge(delta) {
+    var selN = selectedNote();
+    if (!selN || selN.note.rest || !selN.note.pitch) return;
+    var clef = clefName(BN.state.current, selN.note.staff);
+    var pos = BN.music.pitchToPos(clef, selN.note.pitch) + delta;
+    var pitch = BN.music.posToPitch(clef, pos, BN.model.keyOf(BN.state.current.parts[0], selN.measureIndex));
+    commit(function (score) { BN.model.replacePitch(score, selN.note.id, pitch); });
   }
 
   function applyAcc(name) {
@@ -411,7 +511,7 @@
   function recHit() { return null; }
 
   document.addEventListener("click", function (e) {
-    var btn = e.target.closest("[data-type], [data-acc], [data-action='rest'], [data-action='dots'], [data-action='tie'], [data-action='select'], [data-action='delete'], [data-action='undo'], [data-hist='undo'], [data-action='redo']");
+    var btn = e.target.closest("[data-type], [data-acc], [data-action='rest'], [data-action='dots'], [data-action='tie'], [data-action='select'], [data-action='delete'], [data-action='undo'], [data-hist='undo'], [data-action='redo'], [data-action='step-up'], [data-action='step-down']");
     if (!btn || !BN.state.current) return;
     var pal = palette();
     if (btn.dataset.type) {
@@ -462,6 +562,8 @@
     }
     if (btn.dataset.action === "undo" || btn.dataset.hist === "undo") BN.editor.undo();
     if (btn.dataset.action === "redo") BN.editor.redo();
+    if (btn.dataset.action === "step-up") nudge(1);
+    if (btn.dataset.action === "step-down") nudge(-1);
     BN.editor.syncPalette();
   });
 })();

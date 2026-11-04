@@ -1,9 +1,11 @@
 /* VexFlow engraving and hit testing.
-   Drawn in a compact user space and scaled so each staff step is at least 12px. */
+   Staff lines are wider than the VexFlow default so a finger can tell one
+   diatonic step from the next. The SVG is then scaled onto the page. */
 (function () {
   "use strict";
   var BN = (window.BN = window.BN || {});
   var SCALE = 2.4;
+  var LINE = 16;
 
   function vf() { return window.Vex && window.Vex.Flow; }
 
@@ -31,9 +33,18 @@
 
   function tune(stave) {
     if (!stave.options) return stave;
-    stave.options.space_above_staff_ln = 2;
-    stave.options.space_below_staff_ln = 2;
+    stave.options.spacing_between_lines_px = LINE;
+    stave.options.space_above_staff_ln = 4;
+    stave.options.space_below_staff_ln = 4;
+    if (typeof stave.resetLines === "function") stave.resetLines();
     return stave;
+  }
+
+  function systemBox(grand) {
+    var yT = LINE + 8;
+    var yB = yT + LINE * 8;
+    var below = (4 + 9) * LINE + 28;
+    return { yT: yT, yB: yB, height: (grand ? yB : yT) + below };
   }
 
   BN.render = {
@@ -49,7 +60,8 @@
       var systems = BN.layout.systems(score, userWidth);
       var part = score.parts[0];
       var grand = score.staffLayout === "grand";
-      var height = grand ? 220 : 150;
+      var frame = systemBox(grand);
+      var height = frame.height;
       host.innerHTML = "";
       var map = { systems: [], byMeasure: {}, notes: {}, svg: [] };
       var selected = (opts.selectedIds || []).reduce(function (a, id) { a[id] = true; return a; }, {});
@@ -80,8 +92,8 @@
         var boxes = [];
         system.measures.forEach(function (box) {
           var measure = part.measures[box.index];
-          var yT = grand ? 8 : 16;
-          var yB = 108;
+          var yT = frame.yT;
+          var yB = frame.yB;
           var staves = [];
           function make(y, staffNum, sign) {
             var stave = tune(new Flow.Stave(box.x, y, box.w));
@@ -144,6 +156,7 @@
             else if (score.staffLayout === "treble") sign = "G";
             var clefName = sign === "G" ? "treble" : "bass";
             var tickables = [];
+            var builtIds = [];
             var key = BN.model.keyOf(part, box.index);
             notes.forEach(function (note, ni) {
               var built;
@@ -163,6 +176,7 @@
               var color = (selected[note.id] || playing === note.id) ? ink.accent : ink.text;
               built.setStyle({ fillStyle: color, strokeStyle: color });
               tickables.push(built);
+              builtIds.push(note.id);
               var pitchY = note.rest ? stave.getYForLine(2) : yFor(stave, BN.music.pitchToPos(clefName, note.pitch));
               map.notes[note.id] = { id: note.id, measure: box.index, staff: staffNum, system: si };
               box.slots[staffNum].push({ id: note.id, note: built, pitchY: pitchY });
@@ -175,6 +189,14 @@
             try {
               new Flow.Formatter().joinVoices([voice]).format([voice], room);
               voice.draw(ctx, stave);
+              var heads = svg.querySelectorAll(".vf-stavenote");
+              var headStart = heads.length - builtIds.length;
+              builtIds.forEach(function (id, i) {
+                var el = heads[headStart + i];
+                if (!el) return;
+                el.setAttribute("data-note-id", id);
+                if (selected[id]) el.classList.add("is-selected");
+              });
               var groups = Flow.Beam.getDefaultBeamGroups(time.beats + "/" + time.beatType);
               Flow.Beam.generateBeams(tickables, { groups: groups }).forEach(function (beam) {
                 beam.setStyle({ fillStyle: ink.text, strokeStyle: ink.text });
@@ -253,6 +275,15 @@
       return Math.abs(b.y - a.y);
     },
 
+    pitchClient: function (hit) {
+      var box = BN.render.layout && BN.render.layout.byMeasure[hit.measure];
+      if (!box) return { x: 0, y: 0 };
+      var stave = box.staves[hit.staff] || box.staves[1];
+      var y = yFor(stave, hit.pos);
+      var x = hit.svg ? hit.svg.x : stave.getNoteStartX();
+      return BN.render.client(box.svg, x, y);
+    },
+
     locate: function (spec) {
       var map = BN.render.layout;
       var box = map && map.byMeasure[spec.measure || 0];
@@ -280,7 +311,7 @@
         if (last && x <= last.x + last.w) x = Math.min(endX, last.x + last.w + 4);
       }
       var left = box.x + 6;
-      var right = box.x + box.w - 12;
+      var right = box.x + box.w - 4;
       if (right > left) x = Math.max(left, Math.min(right, x));
       return BN.render.client(box.svg, x, y);
     },
@@ -288,13 +319,14 @@
     hit: function (score, clientX, clientY) {
       var map = BN.render.layout;
       if (!map) return null;
-      var found = null;
+      var best = null;
+      var bestDist = Infinity;
       Object.keys(map.byMeasure).forEach(function (key) {
         var box = map.byMeasure[key];
         var rect = box.svg.getBoundingClientRect();
-        if (clientX < rect.left - 1 || clientX > rect.right + 1 || clientY < rect.top - 1 || clientY > rect.bottom + 1) return;
+        if (clientX < rect.left - 24 || clientX > rect.right + 24 || clientY < rect.top - 72 || clientY > rect.bottom + 72) return;
         var p = BN.render.svgPoint(box.svg, clientX, clientY);
-        if (p.x < box.x - 6 || p.x > box.x + box.w + 8) return;
+        if (p.x < box.x - 8 || p.x > box.x + box.w + 12) return;
         var staff = 1;
         if (score.staffLayout === "grand" && box.staves[2]) {
           var mid = (box.staves[1].getYForLine(4) + box.staves[2].getYForLine(0)) / 2;
@@ -304,15 +336,16 @@
         if (!stave) return;
         var top = yFor(stave, 18) - 8;
         var bottom = yFor(stave, -10) + 8;
-        if (p.y < top || p.y > bottom) return;
+        if (p.y < top) p = { x: p.x, y: top };
+        if (p.y > bottom) p = { x: p.x, y: bottom };
         var spacing = stave.getSpacingBetweenLines() || 10;
         var pos = BN.music.clampPos(Math.round(2 * ((stave.getYForNote(0) - p.y) / spacing - 1)));
         /* getYForNote(0) is one step below the bottom line (pos 0 → note line 1). */
         var slots = box.slots[staff] || [];
         var noteHit = null;
         slots.forEach(function (slot) {
-          var mid = slot.x + slot.w / 2;
-          if (Math.abs(p.x - mid) <= Math.max(4, slot.w * 0.28)) noteHit = slot;
+          var midX = slot.x + slot.w / 2;
+          if (Math.abs(p.x - midX) <= Math.max(4, slot.w * 0.28)) noteHit = slot;
         });
         var lastSlot = slots[slots.length - 1];
         if (lastSlot && p.x > lastSlot.x + lastSlot.w * 0.55) noteHit = null;
@@ -320,9 +353,14 @@
         slots.forEach(function (slot, i) {
           if (!noteHit && p.x < slot.x) insertAt = Math.min(insertAt, i);
         });
-        found = { measure: box.index, staff: staff, pos: pos, noteId: noteHit && noteHit.id, insertAt: insertAt, svg: p };
+        var cy = (rect.top + rect.bottom) / 2;
+        var dist = Math.abs(clientY - cy);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { measure: box.index, staff: staff, pos: pos, noteId: noteHit && noteHit.id, insertAt: insertAt, svg: p };
+        }
       });
-      return found;
+      return best;
     }
   };
 })();
