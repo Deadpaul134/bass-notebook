@@ -1,8 +1,22 @@
 # Third-party notices
 
-Verified on 2026-11-03 against the license files shipped with the exact versions vendored in this repository, and against the upstream LICENSE files at the matching tags.
+Verified on 2026-11-04 against the headers of the files in `vendor/` and the license files shipped next to them.
 
-No GPL, LGPL, AGPL, or CC BY-SA code or fonts are included.
+No GPL, LGPL, AGPL, or CC BY-SA code or fonts are included. All icons in the interface are original SVG drawings made for this project (`js/ui/icons.js`); no third-party icon set, image, or font is used for the interface other than Heebo.
+
+## Every bundled third-party file
+
+| File | Component | Version (from the file header) | License |
+|---|---|---|---|
+| `vendor/vexflow/vexflow-bravura.js` | VexFlow (with Bravura glyph outlines embedded) | 4.2.3, header `VexFlow 4.2.3 2023-08-16` | MIT (VexFlow); SIL OFL 1.1 (Bravura 1.392) |
+| `vendor/vexflow/LICENSE`, `BRAVURA-LICENSE.txt`, `BRAVURA-OFL-UPSTREAM-1.392.txt` | license texts | — | — |
+| `vendor/jspdf/jspdf.umd.min.js` | jsPDF | 2.5.2, header `Version 2.5.2` | MIT (header lists contributors James Hall, yWorks GmbH and others, all MIT) |
+| `vendor/jspdf/LICENSE` | license text | — | — |
+| `vendor/svg2pdf/svg2pdf.umd.min.js` | svg2pdf.js | 2.2.4 | MIT, © yWorks GmbH; contains MIT code © 2013-2015 Vitaly Puzrin (svgpath) |
+| `vendor/svg2pdf/LICENSE` | license text | — | — |
+| `assets/fonts/heebo-hebrew.woff2`, `heebo-latin.woff2`, `OFL.txt` | Heebo | Google Fonts v28 | SIL OFL 1.1 |
+
+`docs/v3/vendor/vexflow.js` (VexFlow 4.2.5, MIT) is only a copy used for the design mockup in `docs/v3/`; it is not loaded by the application.
 
 | Component | Version used | License | Upstream license file checked |
 |---|---|---|---|
