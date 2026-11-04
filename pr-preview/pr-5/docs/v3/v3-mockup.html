@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מחברת בס v3 – mockup</title>
+<script src="vendor/vexflow.js"></script>
+<style>
+:root{--chrome:#24262b;--chrome2:#2f3238;--chrome-line:#3c4048;--ink-on-chrome:#e8eaee;--muted:#9aa1ad;
+--desk:#d9dce1;--paper:#ffffff;--ink:#16181c;--accent:#6b4ee6;--accent-soft:#ece8fd;--sel:#1f6fe0;--sel-soft:rgba(31,111,224,.12);--danger:#d64545;--ok:#2e9d62;}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:"Noto Sans Hebrew","Heebo","DejaVu Sans",sans-serif;background:var(--desk);overflow:hidden}
+.app{width:1280px;height:800px;position:relative;display:flex;flex-direction:column}
+.top{height:56px;background:var(--chrome);color:var(--ink-on-chrome);display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--chrome-line)}
+.btn{min-width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--ink-on-chrome);background:transparent;border:0}
+.btn.box{background:var(--chrome2)}
+.title{font-size:17px;font-weight:600;margin-inline:6px}
+.sub{font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:4px;margin-inline:auto;background:var(--chrome2);padding:4px;border-radius:12px}
+.tab{padding:0 16px;height:36px;display:flex;align-items:center;border-radius:9px;font-size:15px;color:var(--muted)}
+.tab.on{background:var(--accent);color:#fff}
+.play{background:var(--ok);color:#fff;border-radius:22px;width:44px}
+.ribbon{height:52px;background:#f4f5f7;border-bottom:1px solid #c9ccd2;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:14px;color:#333}
+.chip{height:36px;padding:0 12px;border:1px solid #c9ccd2;background:#fff;border-radius:8px;display:flex;align-items:center;gap:6px}
+.chip b{font-weight:600}.sep{width:1px;height:28px;background:#c9ccd2}
+.desk{flex:1;position:relative;padding:20px 28px}
+.paper{background:var(--paper);height:100%;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.18);padding:26px 30px;position:relative}
+.paper h1{font-size:22px;margin:0;text-align:center;font-weight:600;color:var(--ink)}
+.paper .meta{display:flex;justify-content:space-between;font-size:13px;color:#555;margin-top:4px}
+#score{direction:ltr;margin-top:6px}
+.keypad{position:absolute;left:24px;bottom:150px;width:300px;background:var(--chrome);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.35);padding:10px;color:var(--ink-on-chrome);direction:rtl}
+.krow{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
+.k{height:56px;border-radius:10px;background:var(--chrome2);display:flex;align-items:center;justify-content:center;font-size:26px;font-family:"DejaVu Sans",serif}
+.k.on{background:var(--accent);color:#fff}.k.small{height:40px;font-size:14px}
+.k.del{color:#ff8a8a}.lay{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:8px}
+.lay div{height:30px;border-radius:7px;background:var(--chrome2);font-size:12px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.lay .on{background:#4a4e57;color:#fff}
+.klabel{font-size:11px;color:var(--muted);text-align:center;margin-top:2px}
+.piano{position:absolute;left:0;right:0;bottom:0;height:130px;background:var(--chrome);border-top:1px solid var(--chrome-line);direction:ltr;display:flex;padding:8px 12px 10px;gap:0}
+.wk{flex:1;background:#fafafa;border:1px solid #888;border-radius:0 0 6px 6px;position:relative;font-size:11px;color:#777;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px}
+.wk.hit{background:#d9d0ff}
+.bk{position:absolute;top:0;width:60%;height:62%;background:#1b1c1f;right:-30%;z-index:2;border-radius:0 0 4px 4px}
+.pianobar{position:absolute;bottom:130px;right:12px;background:var(--chrome);color:var(--muted);font-size:12px;padding:4px 10px;border-radius:8px 8px 0 0}
+.ctx{position:absolute;display:none;background:var(--chrome);color:#fff;border-radius:12px;padding:6px;gap:4px;box-shadow:0 6px 18px rgba(0,0,0,.35);direction:rtl}
+.ctx .btn{font-size:16px;min-width:48px}
+.ctx .lbl{font-size:13px;padding:0 10px;display:flex;align-items:center;color:var(--accent-soft)}
+.selected .ctx{display:flex}
+.status{position:absolute;bottom:160px;right:44px;font-size:12px;color:#555}
+</style></head>
+<body><div class="app" id="app">
+ <div class="top">
+  <button class="btn">→</button>
+  <div><div class="title">גרוב בפה – רעיון 3</div><div class="sub">נשמר · 04.11.2026</div></div>
+  <div class="tabs"><div class="tab on">הזנת תווים</div><div class="tab">סימנים</div><div class="tab">תיבות</div><div class="tab">טקסט</div><div class="tab">השמעה</div></div>
+  <button class="btn box" title="בטל">↶</button><button class="btn box" title="בצע שוב">↷</button>
+  <button class="btn play">▶</button><button class="btn">⋮</button>
+ </div>
+ <div class="ribbon">
+  <div class="chip">מפתח <b>𝄢 פה</b></div><div class="chip">סולם <b>F מז'ור</b></div><div class="chip">משקל <b>4/4</b></div><div class="chip">♩ = <b>96</b></div>
+  <div class="sep"></div><div class="chip">קלט: <b>הקשה + לוח</b></div><div class="chip">זום 100%</div>
+ </div>
+ <div class="desk"><div class="paper"><h1>גרוב בפה – רעיון 3</h1><div class="meta"><span>פול סמסון</span><span>♩ = 96</span></div><div id="score"></div>
+  <div class="ctx" id="ctx"><span class="lbl">A2 · רבע</span><button class="btn">▲</button><button class="btn">▼</button><button class="btn">♯</button><button class="btn">♭</button><button class="btn">♪</button><button class="btn">·</button><button class="btn" style="color:#ff8a8a">🗑</button></div>
+ </div></div>
+ <div class="keypad">
+  <div class="krow"><div class="k small del">🗑 מחק</div><div class="k small">↶ בטל</div><div class="k small">↷ שוב</div><div class="k small">✕ הסתר</div></div>
+  <div class="lay"><div class="on">תווים</div><div>עוד</div><div>סימנים</div><div>חיבורים</div><div>דינמיקה</div><div>קווים</div></div>
+  <div class="krow"><div class="k"><svg width="34" height="40" viewBox="0 0 34 40" fill="currentColor" stroke="currentColor"><ellipse cx="17" cy="22" rx="8" ry="5.5" fill="none" stroke-width="3"/></svg></div><div class="k"><svg width="34" height="40" viewBox="0 0 34 40" fill="currentColor" stroke="currentColor"><ellipse cx="13" cy="30" rx="6.5" ry="4.5" fill="none" stroke-width="2.5" transform="rotate(-20 13 30)"/><line x1="19" y1="29" x2="19" y2="4" stroke-width="2"/></svg></div><div class="k on">♩</div><div class="k">♪</div></div>
+  <div class="krow"><div class="k"><svg width="34" height="40" viewBox="0 0 34 40" fill="currentColor" stroke="currentColor"><ellipse cx="13" cy="30" rx="6.5" ry="4.5" transform="rotate(-20 13 30)"/><line x1="19" y1="29" x2="19" y2="4" stroke-width="2"/><path d="M19 4 q8 6 7 14" fill="none" stroke-width="2.5"/><path d="M19 11 q8 6 7 14" fill="none" stroke-width="2.5"/></svg></div><div class="k">·</div><div class="k">⁀</div><div class="k"><svg width="34" height="40" viewBox="0 0 34 40" fill="currentColor" stroke="currentColor"><path d="M13 5 l8 9 -6 7 7 9 q-8 -3 -7 5 q-6 -6 3 -8 l-7 -8 6 -6z"/></svg></div></div>
+  <div class="krow"><div class="k">♯</div><div class="k">♭</div><div class="k">♮</div><div class="k" style="font-size:18px">↕ גובה</div></div>
+  <div class="klabel">גרור מעלה/מטה על משך = גובה · ימינה ♯ שמאלה ♭</div>
+ </div>
+ <div class="status">תיבה 3 · פעמה 1 · קול 1</div>
+ <div class="pianobar">פסנתר ▾ · C1–C4</div>
+ <div class="piano" id="piano"></div>
+</div>
+<script>
+const sel=location.hash==="#selected"; if(sel)document.getElementById('app').classList.add('selected');
+// piano C1..B3 (21 white keys)
+const p=document.getElementById('piano'),names="CDEFGAB";
+for(let o=1;o<=3;o++)for(let i=0;i<7;i++){const d=document.createElement('div');d.className='wk'+((sel&&o==2&&i==5)?' hit':'');d.textContent=names[i]==='C'?'C'+o:'';if("CDFGA".includes(names[i])){const b=document.createElement('div');b.className='bk';d.appendChild(b)}p.appendChild(d)}
+const VF=Vex.Flow,el=document.getElementById('score');
+const r=new VF.Renderer(el,VF.Renderer.Backends.SVG);r.resize(1160,380);const c=r.getContext();
+const bars=[
+ ["f/2/q","f/2/8","c/3/8","f/3/q","e/3/q"],
+ ["d/3/q","d/3/8","a/2/8","bb/2/h"],
+ ["a/2/q","c/3/q","d/3/q","e/3/q"],
+ ["f/3/h","c/3/q","qr"]];
+function mk(s,i,bi){if(s==="qr")return new VF.StaveNote({clef:"bass",keys:["d/3"],duration:"qr"});const [k,o,d]=s.split('/');const n=new VF.StaveNote({clef:"bass",keys:[k+"/"+o],duration:d});
+ if(k.length>1&&k[1]==='b'&&false)n.addModifier(new VF.Accidental('b'));
+ if(sel&&bi===2&&i===0)n.setStyle({fillStyle:"#1f6fe0",strokeStyle:"#1f6fe0"});return n}
+let x=10,y=20,w=[300,270,270,280];
+bars.forEach((b,bi)=>{const st=new VF.Stave(x,y,w[bi]);if(bi===0)st.addClef("bass").addKeySignature("F").addTimeSignature("4/4");if(bi===3)st.setEndBarType(VF.Barline.type.END);st.setContext(c).draw();
+ const notes=b.map((s,i)=>mk(s,i,bi));const beams=VF.Beam.generateBeams(notes);VF.Formatter.FormatAndDraw(c,st,notes);beams.forEach(be=>be.setContext(c).draw());
+ if(bi===2&&sel){const n=notes[0],bb=n.getBoundingBox();window._sel={x:bb.getX(),y:bb.getY()};}
+ if(bi===2&&!sel){const nx=st.getNoteStartX()+4;c.save();c.setFillStyle("#6b4ee6");c.fillRect(nx,y+30,3,52);c.restore();}
+ x+=w[bi];});
+// second system, empty bars for writing
+x=10;y=170;[340,270,270,240].forEach((ww,i)=>{const st=new VF.Stave(x,y,ww);if(i===0)st.addClef("bass").addKeySignature("F");st.setContext(c).draw();x+=ww;});
+if(sel){const s=window._sel,pr=el.getBoundingClientRect(),pp=el.parentElement.getBoundingClientRect(),ctx=document.getElementById('ctx');
+ ctx.style.left=(s.x+pr.left-pp.left-150)+"px";ctx.style.top=(s.y+pr.top-pp.top-74)+"px";
+ c.save();c.setFillStyle("rgba(31,111,224,.12)");c.fillRect(s.x-8,20+20,40,90);c.restore();}
+</script></body></html>
