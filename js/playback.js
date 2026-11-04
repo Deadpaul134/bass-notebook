@@ -10,6 +10,8 @@
   var bpm = 100;
   var planCache = [];
   var cursorId = null;
+  var lastArgs = null;
+  var DYN = { pp: 0.45, p: 0.65, mp: 0.85, mf: 1, f: 1.25, ff: 1.5 };
 
   function now() {
     if (BN.playback && BN.playback.clock) return BN.playback.clock.now();
@@ -18,6 +20,7 @@
 
   function ensure() {
     if (BN.playback && BN.playback.clock) return null;
+    if (BN.data && BN.data.settings && !BN.data.settings().playback) return null;
     if (audio) return audio;
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
@@ -84,6 +87,8 @@
             midi: BN.music.pitchToMidi(note.pitch),
             staff: staff,
             instrument: instrument(score, staff),
+            gain: DYN[note.dyn] || 1,
+            shorten: note.ghost ? 0.25 : (note.artic || []).indexOf("staccato") >= 0 ? 0.5 : (note.artic || []).indexOf("tenuto") >= 0 ? 1 : 0.92,
             noteIds: [note.id],
             spans: [{ id: note.id, ticks: durTicks }]
           };
@@ -110,24 +115,24 @@
     return id;
   }
 
-  function envGain(ctx, time, dur, peak) {
+  function envGain(ctx, time, dur, peak, gain) {
     var g = ctx.createGain();
     var vol = BN.data && BN.data.settings ? BN.data.settings().volume : 0.8;
-    var loud = Math.max(0.0001, peak * (vol == null ? 0.8 : vol));
+    var loud = Math.max(0.0001, peak * (gain || 1) * (vol == null ? 0.8 : vol));
     g.gain.setValueAtTime(0.0001, time);
     g.gain.exponentialRampToValueAtTime(loud, time + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.08, dur));
     return g;
   }
 
-  function voice(ctx, when, midi, dur, kind) {
+  function voice(ctx, when, midi, dur, kind, gain) {
     var freq = BN.music.midiToFreq(midi);
     var filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.setValueAtTime(kind === "bass" ? 700 : 1800, when);
-    var gain = envGain(ctx, when, dur, kind === "bass" ? 0.22 : 0.16);
-    filter.connect(gain);
-    gain.connect(limiter || ctx.destination);
+    var env = envGain(ctx, when, dur, kind === "bass" ? 0.22 : 0.16, gain);
+    filter.connect(env);
+    env.connect(limiter || ctx.destination);
     var osc = ctx.createOscillator();
     osc.type = kind === "bass" ? "sawtooth" : "triangle";
     osc.frequency.value = freq;
@@ -164,6 +169,12 @@
     return current;
   }
 
+  function endTime() {
+    var end = 0;
+    planCache.forEach(function (ev) { end = Math.max(end, ev.t + ev.dur); });
+    return end;
+  }
+
   function follow() {
     if (!playing) return;
     var elapsed = now() - startedAt;
@@ -174,8 +185,10 @@
       BN.state.playingId = id;
       if (BN.editor && BN.editor.onPlayhead) BN.editor.onPlayhead(id);
     }
-    if (planCache.length && elapsed > planCache[planCache.length - 1].t + planCache[planCache.length - 1].dur + 0.2) {
+    if (planCache.length && elapsed > endTime() + 0.2) {
+      var again = BN.state.loop && lastArgs;
       BN.playback.stop();
+      if (again) BN.playback.play(lastArgs.score, lastArgs.opts);
       return;
     }
     if (!(BN.playback && BN.playback.clock)) timer = requestAnimationFrame(follow);
@@ -191,17 +204,21 @@
       if (when < fromTime) return;
       if (when > horizon) return;
       ev._done = true;
-      voice(ctx, when, ev.midi, ev.dur, ev.instrument);
+      voice(ctx, when, ev.midi, ev.dur * (ev.shorten || 1), ev.instrument, ev.gain);
     });
-    if (BN.data && BN.data.settings && BN.data.settings().metronome && BN.playback._bar > 0) {
-      var bar = BN.playback._bar;
-      var beat = bar / (BN.playback._beats || 4);
-      for (var i = 0; i < (BN.playback._beats || 4) * 8; i++) {
-        var tBeat = startedAt + i * beat;
+    var set = BN.data && BN.data.settings ? BN.data.settings() : {};
+    var beatSec = BN.playback._beatSec || 0.6;
+    var perBar = BN.playback._beats || 4;
+    var count = BN.playback._bar || 0;
+    var end = endTime();
+    if (beatSec && (set.metronome || count > 0)) {
+      for (var i = 0; i * beatSec <= end + 0.001; i++) {
+        var tBeat = startedAt + i * beatSec;
         if (tBeat < fromTime || tBeat > horizon) continue;
         if (BN.playback._clicked[i]) continue;
+        if (!set.metronome && i * beatSec >= count - 0.001) continue;
         BN.playback._clicked[i] = true;
-        click(ctx, tBeat, i % (BN.playback._beats || 4) === 0);
+        click(ctx, tBeat, i % perBar === 0);
       }
     }
   }
@@ -233,6 +250,8 @@
       }
       BN.playback._bar = count;
       BN.playback._beats = beats;
+      BN.playback._beatSec = 60 / bpm;
+      lastArgs = { score: score, opts: { bpm: opts.bpm, fromTick: opts.fromTick } };
       BN.playback._clicked = {};
       planCache.forEach(function (ev) { ev._done = false; });
       playing = true;

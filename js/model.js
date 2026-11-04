@@ -153,6 +153,62 @@
     return found;
   }
 
+
+  function refs(score, staff) {
+    var out = [];
+    partOf(score).measures.forEach(function (m, mi) {
+      m.notes.forEach(function (n) { if (n.staff === staff && !n.generated) out.push({ note: n, mi: mi }); });
+    });
+    return out;
+  }
+
+  function samePitch(a, b) {
+    return a.pitch && b.pitch && a.pitch.step === b.pitch.step && a.pitch.octave === b.pitch.octave && (a.pitch.alter || 0) === (b.pitch.alter || 0);
+  }
+
+  function cleanTies(score) {
+    for (var s = 1; s <= staffCount(score); s++) {
+      var list = refs(score, s).map(function (r) { return r.note; });
+      list.forEach(function (n, i) {
+        var nxt = list[i + 1];
+        var prev = list[i - 1];
+        if (n.tie && n.tie.start && !(nxt && !n.rest && !nxt.rest && samePitch(n, nxt))) delete n.tie.start;
+        if (n.tie && n.tie.start && nxt) nxt.tie = Object.assign({}, nxt.tie, { stop: true });
+        if (n.tie && n.tie.stop && !(prev && prev.tie && prev.tie.start)) delete n.tie.stop;
+        if (n.tie && !n.tie.start && !n.tie.stop) delete n.tie;
+      });
+    }
+  }
+
+  function keyAt(score, mi) { return keyOf(partOf(score), mi); }
+
+  function clefName(score, staff) {
+    if (score.staffLayout === "grand") return staff === 1 ? "treble" : "bass";
+    return score.staffLayout === "treble" ? "treble" : "bass";
+  }
+
+  function applyAlter(score, ref, alter) {
+    var n = ref.note;
+    var base = BN.music.fifthsAlter(n.pitch.step, keyAt(score, ref.mi).fifths);
+    n.pitch.alter = alter;
+    if (alter === base) delete n.accidental;
+    else n.accidental = alter === 1 ? "sharp" : alter === -1 ? "flat" : "natural";
+  }
+
+  function findRef(score, id) {
+    var found = null;
+    partOf(score).measures.forEach(function (m, mi) {
+      m.notes.forEach(function (n, ni) { if (n.id === id) found = { note: n, mi: mi, ni: ni, measure: m }; });
+    });
+    return found;
+  }
+
+  function fullRest(score, staff, ticks) {
+    return BN.music.decompose(ticks).map(function (piece) {
+      return { id: uid("r"), staff: staff, voice: 1, rest: true, duration: piece.duration, type: piece.type, dots: piece.dots };
+    });
+  }
+
   BN.model = {
     defaultClefs: defaultClefs,
     timeOf: timeOf,
@@ -169,6 +225,7 @@
         id: opts.id || uid("s"),
         v: 2,
         title: opts.title || "רעיון חדש",
+        composer: opts.composer || "",
         date: opts.date || (BN.ymd ? BN.ymd() : "2026-11-03"),
         createdAt: opts.createdAt || now,
         updatedAt: now,
@@ -324,11 +381,24 @@
       var part = partOf(score);
       var measure = part.measures[measureIndex];
       if (!measure) return BN.model.append(score, staff, note);
-      var staffNotes = measure.notes.filter(function (n) { return n.staff === staff && !n.generated; });
-      var before = staffNotes[noteIndex];
-      if (!before) return BN.model.append(score, staff, note);
-      var at = measure.notes.indexOf(before);
-      measure.notes.splice(at, 0, note);
+      /* Earlier gaps on this staff become real rests, so the note lands in the tapped measure. */
+      for (var j = 0; j < measureIndex; j++) {
+        part.measures[j].notes.forEach(function (n) {
+          if (n.staff === staff && n.generated) delete n.generated;
+        });
+      }
+      var own = measure.notes.filter(function (n) { return n.staff === staff && !n.generated; });
+      var before = own[noteIndex];
+      if (!own.length) {
+        measure.notes = measure.notes.filter(function (n) { return !(n.staff === staff && n.generated); });
+        measure.notes.push(note);
+      } else if (before) {
+        measure.notes.splice(measure.notes.indexOf(before), 0, note);
+      } else {
+        var last = own[own.length - 1];
+        measure.notes.splice(measure.notes.indexOf(last) + 1, 0, note);
+      }
+      cleanTies(score);
       return BN.model.normalize(score);
     },
 
@@ -506,4 +576,324 @@
       return BN.model.normalize(score);
     }
   };
+
+  Object.assign(BN.model, {
+    clefName: clefName,
+    refs: refs,
+    cleanTies: cleanTies,
+
+    /* Alter that applies to a new note of this pitch: key signature, then earlier notes in the same measure. */
+    alterFor: function (score, staff, measureIndex, noteIndex, step, octave) {
+      var part = partOf(score);
+      var alter = BN.music.fifthsAlter(step, keyOf(part, measureIndex).fifths);
+      var m = part.measures[measureIndex];
+      if (!m) return alter;
+      var own = m.notes.filter(function (n) { return n.staff === staff && !n.generated; });
+      own.slice(0, noteIndex == null ? own.length : noteIndex).forEach(function (n) {
+        if (n.pitch && n.pitch.step === step && n.pitch.octave === octave) alter = n.pitch.alter || 0;
+      });
+      return alter;
+    },
+
+    /* Cursor position (measure, index) right after a note, following tie pieces. */
+    cursorAfter: function (score, staff, id) {
+      var list = refs(score, staff);
+      var i = list.findIndex(function (r) { return r.note.id === id; });
+      if (i < 0) return null;
+      while (list[i].note.tie && list[i].note.tie.start && list[i + 1] && list[i + 1].note.tie && list[i + 1].note.tie.stop) i += 1;
+      var r = list[i];
+      var m = partOf(score).measures[r.mi];
+      var own = m.notes.filter(function (n) { return n.staff === staff && !n.generated; });
+      var at = own.indexOf(r.note) + 1;
+      var used = own.reduce(function (a, n) { return a + n.duration; }, 0);
+      var cap = BN.music.measureTicks(timeOf(partOf(score), r.mi));
+      if (at >= own.length && used >= cap && r.mi + 1 < partOf(score).measures.length) return { staff: staff, measure: r.mi + 1, index: 0 };
+      return { staff: staff, measure: r.mi, index: at };
+    },
+
+    clampCursor: function (score, cur) {
+      var part = partOf(score);
+      var staff = Math.min(cur.staff || 1, staffCount(score));
+      var mi = Math.max(0, Math.min(cur.measure || 0, part.measures.length - 1));
+      var count = part.measures[mi].notes.filter(function (n) { return n.staff === staff && !n.generated; }).length;
+      return { staff: staff, measure: mi, index: Math.max(0, Math.min(cur.index || 0, count)) };
+    },
+
+    /* Ticks from the start of the score up to a cursor, for "play from here". */
+    tickAt: function (score, cur) {
+      var part = partOf(score);
+      var tick = 0;
+      for (var i = 0; i < cur.measure && i < part.measures.length; i++) tick += BN.music.measureTicks(timeOf(part, i));
+      var own = (part.measures[cur.measure] ? part.measures[cur.measure].notes : []).filter(function (n) { return n.staff === cur.staff; });
+      for (var k = 0; k < cur.index && k < own.length; k++) tick += own[k].duration;
+      return tick;
+    },
+
+    noteIdsInMeasures: function (score, from, to, staff) {
+      var out = [];
+      partOf(score).measures.slice(from, to + 1).forEach(function (m) {
+        m.notes.forEach(function (n) { if (!n.generated && (!staff || n.staff === staff)) out.push(n.id); });
+      });
+      return out;
+    },
+
+    /* Notes between two ids in staff order, both included. */
+    rangeIds: function (score, staff, a, b) {
+      var list = refs(score, staff).map(function (r) { return r.note.id; });
+      var i = list.indexOf(a);
+      var j = list.indexOf(b);
+      if (i < 0 || j < 0) return [];
+      return list.slice(Math.min(i, j), Math.max(i, j) + 1);
+    },
+
+    setDuration: function (score, ids, type, dots) {
+      var part = partOf(score);
+      var ticks = BN.music.ticksOf(type, dots);
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (!r || r.note.generated) return;
+        var n = r.note;
+        var delta = ticks - n.duration;
+        n.type = type;
+        n.dots = dots;
+        n.duration = ticks;
+        var list = refs(score, n.staff);
+        var at = list.findIndex(function (x) { return x.note === n; });
+        if (delta < 0 && at < list.length - 1) {
+          var rests = fullRest(score, n.staff, -delta);
+          var arr = r.measure.notes;
+          arr.splice.apply(arr, [arr.indexOf(n) + 1, 0].concat(rests));
+        } else if (delta > 0) {
+          var need = delta;
+          while (need > 0) {
+            var cur = refs(score, n.staff);
+            var idx = cur.findIndex(function (x) { return x.note === n; });
+            var nx = cur[idx + 1];
+            if (!nx || !nx.note.rest) break;
+            var arr2 = part.measures[nx.mi].notes;
+            var pos = arr2.indexOf(nx.note);
+            if (nx.note.duration <= need) {
+              need -= nx.note.duration;
+              arr2.splice(pos, 1);
+            } else {
+              var left = fullRest(score, n.staff, nx.note.duration - need);
+              need = 0;
+              arr2.splice.apply(arr2, [pos, 1].concat(left));
+            }
+          }
+        }
+        if (n.tie && n.rest) delete n.tie;
+      });
+      cleanTies(score);
+      return BN.model.normalize(score);
+    },
+
+    toRest: function (score, ids) {
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (!r) return;
+        r.note.rest = true;
+        ["pitch", "accidental", "tie", "artic", "dyn", "slur", "ghost"].forEach(function (k) { delete r.note[k]; });
+      });
+      cleanTies(score);
+      return score;
+    },
+
+    setPitchOf: function (score, id, pitch) {
+      var r = findRef(score, id);
+      if (!r) return score;
+      if (r.note.rest) { r.note.rest = false; }
+      r.note.pitch = { step: pitch.step, alter: pitch.alter || 0, octave: pitch.octave };
+      applyAlter(score, r, pitch.alter || 0);
+      cleanTies(score);
+      return score;
+    },
+
+    /* Move notes by diatonic steps; the key signature decides the alter. */
+    stepNotes: function (score, ids, steps) {
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (!r || r.note.rest || !r.note.pitch) return;
+        var clef = clefName(score, r.note.staff);
+        var pos = BN.music.pitchToPos(clef, r.note.pitch) + steps;
+        var p = BN.music.posToPitch(clef, pos, keyAt(score, r.mi));
+        r.note.pitch = { step: p.step, alter: p.alter, octave: p.octave };
+        delete r.note.accidental;
+      });
+      cleanTies(score);
+      return score;
+    },
+
+    shiftOctave: function (score, ids, dir) {
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (r && !r.note.rest && r.note.pitch) r.note.pitch.octave += dir;
+      });
+      cleanTies(score);
+      return score;
+    },
+
+    /* ♯/♭ by one semitone, limited to one sharp or one flat. */
+    shiftAlter: function (score, ids, delta) {
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (!r || r.note.rest || !r.note.pitch) return;
+        var next = Math.max(-1, Math.min(1, (r.note.pitch.alter || 0) + delta));
+        applyAlter(score, r, next);
+      });
+      cleanTies(score);
+      return score;
+    },
+
+    setAlterOf: function (score, ids, alter) {
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (!r || r.note.rest || !r.note.pitch) return;
+        applyAlter(score, r, alter);
+      });
+      cleanTies(score);
+      return score;
+    },
+
+    deleteNotes: function (score, ids, mode) {
+      ids.forEach(function (id) {
+        if (findRef(score, id)) BN.model.deleteNote(score, id, mode);
+      });
+      return score;
+    },
+
+    toggleDot: function (score, ids) {
+      var first = ids.map(function (id) { return findRef(score, id); }).filter(Boolean)[0];
+      if (!first) return score;
+      var dots = ((first.note.dots || 0) + 1) % 3;
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (r) BN.model.setDuration(score, [id], r.note.type, dots);
+      });
+      return score;
+    },
+
+    /* Tie each note to the next one when it has the same pitch; a second call removes it. */
+    toggleTie: function (score, ids) {
+      var changed = false;
+      ids.forEach(function (id) {
+        var r = findRef(score, id);
+        if (!r || r.note.rest) return;
+        var list = refs(score, r.note.staff);
+        var i = list.findIndex(function (x) { return x.note === r.note; });
+        var nx = list[i + 1];
+        if (r.note.tie && r.note.tie.start) {
+          delete r.note.tie.start;
+          if (nx && nx.note.tie) delete nx.note.tie.stop;
+          changed = true;
+        } else if (nx && samePitch(r.note, nx.note)) {
+          r.note.tie = Object.assign({}, r.note.tie, { start: true });
+          nx.note.tie = Object.assign({}, nx.note.tie, { stop: true });
+          changed = true;
+        }
+        [r.note, nx && nx.note].forEach(function (x) { if (x && x.tie && !x.tie.start && !x.tie.stop) delete x.tie; });
+      });
+      return changed;
+    },
+
+    toggleArticulation: function (score, ids, name) {
+      var notes = ids.map(function (id) { return findRef(score, id); }).filter(function (r) { return r && !r.note.rest; });
+      var all = notes.length && notes.every(function (r) { return (r.note.artic || []).indexOf(name) >= 0; });
+      notes.forEach(function (r) {
+        var list = (r.note.artic || []).filter(function (a) { return a !== name; });
+        if (!all) list.push(name);
+        if (list.length) r.note.artic = list; else delete r.note.artic;
+      });
+      return notes.length > 0;
+    },
+
+    setDynamic: function (score, ids, dyn) {
+      var notes = ids.map(function (id) { return findRef(score, id); }).filter(function (r) { return r && !r.note.rest; });
+      var all = notes.length && notes.every(function (r) { return r.note.dyn === dyn; });
+      notes.forEach(function (r) { if (all) delete r.note.dyn; else r.note.dyn = dyn; });
+      return notes.length > 0;
+    },
+
+    toggleGhost: function (score, ids) {
+      var notes = ids.map(function (id) { return findRef(score, id); }).filter(function (r) { return r && !r.note.rest; });
+      var all = notes.length && notes.every(function (r) { return r.note.ghost; });
+      notes.forEach(function (r) { if (all) delete r.note.ghost; else r.note.ghost = true; });
+      return notes.length > 0;
+    },
+
+    /* Slur over the selected notes: from the first to the last. */
+    toggleSlur: function (score, ids) {
+      var notes = ids.map(function (id) { return findRef(score, id); }).filter(function (r) { return r && !r.note.rest; });
+      if (notes.length < 2) return false;
+      var first = notes[0].note;
+      var last = notes[notes.length - 1].note;
+      if (first.slur && first.slur.start) {
+        delete first.slur;
+        notes.forEach(function (r) { if (r.note.slur && r.note.slur.stop) delete r.note.slur; });
+      } else {
+        first.slur = { start: true };
+        last.slur = { stop: true };
+      }
+      return true;
+    },
+
+    copyNotes: function (score, ids) {
+      return ids.map(function (id) { return findRef(score, id); }).filter(Boolean).map(function (r) {
+        var c = clone(r.note);
+        delete c.id;
+        delete c.tie;
+        delete c.generated;
+        delete c.slur;
+        return c;
+      });
+    },
+
+    pasteNotes: function (score, staff, measureIndex, noteIndex, clips) {
+      var lastId = null;
+      var mi = measureIndex;
+      var ni = noteIndex;
+      clips.forEach(function (clip) {
+        var n = clone(clip);
+        n.id = uid("n");
+        n.staff = staff;
+        BN.model.insertAt(score, staff, mi, ni, n);
+        lastId = n.id;
+        var cur = BN.model.cursorAfter(score, staff, n.id);
+        if (cur) { mi = cur.measure; ni = cur.index; }
+      });
+      return lastId;
+    },
+
+    insertMeasure: function (score, after) {
+      var part = partOf(score);
+      var idx = Math.max(-1, Math.min(after, part.measures.length - 1));
+      var cap = BN.music.measureTicks(timeOf(part, Math.max(0, idx)));
+      var notes = [];
+      for (var s = 1; s <= staffCount(score); s++) notes = notes.concat(fullRest(score, s, cap));
+      part.measures.splice(idx + 1, 0, { number: idx + 2, notes: notes });
+      cleanTies(score);
+      return BN.model.normalize(score);
+    },
+
+    removeMeasure: function (score, index) {
+      var part = partOf(score);
+      if (!part.measures[index]) return score;
+      var gone = part.measures[index];
+      if (index === 0 && part.measures.length > 1) {
+        part.measures[1].attributes = Object.assign({}, gone.attributes, part.measures[1].attributes);
+      }
+      part.measures.splice(index, 1);
+      if (!part.measures.length) part.measures.push({ number: 1, attributes: gone.attributes, notes: [] });
+      cleanTies(score);
+      return BN.model.normalize(score);
+    },
+
+    setRepeat: function (score, measureIndex, kind) {
+      var m = partOf(score).measures[measureIndex];
+      if (!m) return score;
+      if (kind === "forward") m.barline = Object.assign({ right: "regular" }, m.barline, { repeat: "forward" });
+      else if (kind === "backward") m.barline = { right: "light-heavy", repeat: "backward" };
+      return score;
+    }
+  });
 })();

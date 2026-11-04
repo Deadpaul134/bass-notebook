@@ -16,7 +16,13 @@
   }
 
   function noteXml(note, voice) {
-    var xml = "<note>";
+    var xml = "";
+    if (note.dyn && !note.rest) {
+      xml += '<direction placement="below"><direction-type><dynamics><' + note.dyn + "/></dynamics></direction-type>";
+      if (note.staff) xml += "<staff>" + note.staff + "</staff>";
+      xml += "</direction>";
+    }
+    xml += "<note>";
     if (note.rest) xml += "<rest/>";
     else {
       xml += "<pitch><step>" + note.pitch.step + "</step>";
@@ -24,14 +30,20 @@
       xml += "<octave>" + note.pitch.octave + "</octave></pitch>";
     }
     xml += "<duration>" + note.duration + "</duration>";
+    if (note.tie && note.tie.stop) xml += '<tie type="stop"/>';
+    if (note.tie && note.tie.start) xml += '<tie type="start"/>';
     xml += "<voice>" + (voice || 1) + "</voice>";
     xml += typeTag(note);
     if (note.accidental) xml += "<accidental>" + note.accidental + "</accidental>";
-    if (note.tie && note.tie.stop) xml += '<tie type="stop"/>';
-    if (note.tie && note.tie.start) xml += '<tie type="start"/>';
+    if (note.ghost) xml += "<notehead>x</notehead>";
     if (note.staff) xml += "<staff>" + note.staff + "</staff>";
     if (note.tie && note.tie.stop) xml += '<notations><tied type="stop"/></notations>';
     if (note.tie && note.tie.start) xml += '<notations><tied type="start"/></notations>';
+    if (note.slur && note.slur.start) xml += '<notations><slur type="start" number="1"/></notations>';
+    if (note.slur && note.slur.stop) xml += '<notations><slur type="stop" number="1"/></notations>';
+    var art = (note.artic || []).filter(function (a) { return a !== "fermata"; });
+    if (art.length) xml += "<notations><articulations>" + art.map(function (a) { return "<" + a + "/>"; }).join("") + "</articulations></notations>";
+    if ((note.artic || []).indexOf("fermata") >= 0) xml += '<notations><fermata type="upright"/></notations>';
     xml += "</note>";
     return xml;
   }
@@ -42,6 +54,7 @@
     var xml = '<?xml version="1.0" encoding="UTF-8"?>';
     xml += '<score-partwise version="4.0">';
     xml += "<work><work-title>" + esc(score.title) + "</work-title></work>";
+    if (score.composer) xml += '<identification><creator type="composer">' + esc(score.composer) + "</creator></identification>";
     xml += "<part-list><score-part id=\"P1\"><part-name>" + esc(part.name || "Bass") + "</part-name></score-part></part-list>";
     xml += '<part id="P1">';
     part.measures.forEach(function (measure, mi) {
@@ -66,6 +79,9 @@
         if (measure.attributes.time) xml += "<time><beats>" + measure.attributes.time.beats + "</beats><beat-type>" + measure.attributes.time.beatType + "</beat-type></time>";
         xml += "</attributes>";
       }
+      if (measure.barline && measure.barline.repeat === "forward") {
+        xml += '<barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>';
+      }
       var audible = measure.notes.filter(function (n) { return !n.generated; });
       if (staves === 2) {
         var s1 = audible.filter(function (n) { return n.staff === 1; });
@@ -76,10 +92,10 @@
       } else {
         audible.forEach(function (n) { xml += noteXml(n, 1); });
       }
-      if (measure.barline && measure.barline.right && measure.barline.right !== "regular") {
-        xml += '<barline location="right"><bar-style>' + measure.barline.right + "</bar-style>";
-        if (measure.barline.repeat) xml += '<repeat direction="' + measure.barline.repeat + '"/>';
-        xml += "</barline>";
+      if (measure.barline && measure.barline.repeat === "backward") {
+        xml += '<barline location="right"><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>';
+      } else if (measure.barline && measure.barline.right && measure.barline.right !== "regular") {
+        xml += '<barline location="right"><bar-style>' + measure.barline.right + "</bar-style></barline>";
       }
       xml += "</measure>";
     });
@@ -101,7 +117,8 @@
     var firstClef = doc.getElementsByTagName("clef")[0];
     if (layout !== "grand" && firstClef && text(firstClef, "sign") === "G") layout = "treble";
     var per = doc.getElementsByTagName("per-minute")[0];
-    var score = BN.model.blank({ title: title, staffLayout: layout, bpm: per ? Number(per.textContent) : 100 });
+    var creator = doc.getElementsByTagName("creator")[0];
+    var score = BN.model.blank({ title: title, composer: creator ? creator.textContent : "", staffLayout: layout, bpm: per ? Number(per.textContent) : 100 });
     var part = score.parts[0];
     part.measures = [];
     var measures = doc.getElementsByTagName("measure");
@@ -125,8 +142,13 @@
         }
       }
       var staffCursor = 1;
+      var pendingDyn = null;
       Array.prototype.forEach.call(measureEl.children, function (child) {
         if (child.tagName === "backup") staffCursor = 2;
+        if (child.tagName === "direction") {
+          var dynEl = child.getElementsByTagName("dynamics")[0];
+          if (dynEl && dynEl.firstElementChild) pendingDyn = dynEl.firstElementChild.tagName;
+        }
         if (child.tagName !== "note") return;
         var rest = child.getElementsByTagName("rest").length > 0;
         var type = text(child, "type") || "quarter";
@@ -158,10 +180,27 @@
             if (tie.getAttribute("type") === "stop") note.tie.stop = true;
           });
         }
+        if (child.getElementsByTagName("notehead")[0] && text(child, "notehead") === "x") note.ghost = true;
+        ["staccato", "accent", "tenuto"].forEach(function (a) {
+          if (child.getElementsByTagName(a).length) note.artic = (note.artic || []).concat(a);
+        });
+        if (child.getElementsByTagName("fermata").length) note.artic = (note.artic || []).concat("fermata");
+        Array.prototype.forEach.call(child.getElementsByTagName("slur"), function (sl) {
+          note.slur = note.slur || {};
+          if (sl.getAttribute("type") === "start") note.slur.start = true;
+          if (sl.getAttribute("type") === "stop") note.slur.stop = true;
+        });
+        if (pendingDyn && !rest) { note.dyn = pendingDyn; pendingDyn = null; }
         measure.notes.push(note);
       });
-      var bar = measureEl.getElementsByTagName("bar-style")[0];
-      if (bar) measure.barline = { right: bar.textContent };
+      Array.prototype.forEach.call(measureEl.getElementsByTagName("barline"), function (bl) {
+        var style = text(bl, "bar-style");
+        var rep = bl.getElementsByTagName("repeat")[0];
+        var loc = bl.getAttribute("location") || "right";
+        if (rep && rep.getAttribute("direction") === "forward") measure.barline = Object.assign({ right: "regular" }, measure.barline, { repeat: "forward" });
+        else if (rep && rep.getAttribute("direction") === "backward") measure.barline = { right: "light-heavy", repeat: "backward" };
+        else if (style && loc === "right") measure.barline = { right: style };
+      });
       part.measures.push(measure);
     });
     if (!part.measures.length) part.measures = BN.model.blank().parts[0].measures;
@@ -172,6 +211,7 @@
     var part = score.parts[0];
     return {
       title: score.title,
+      composer: score.composer || "",
       bpm: score.tempo.bpm,
       layout: score.staffLayout,
       divisions: score.divisions,
@@ -189,7 +229,11 @@
               type: n.type,
               dots: n.dots || 0,
               accidental: n.accidental || null,
-              tie: n.tie || null
+              tie: n.tie || null,
+              artic: n.artic || null,
+              dyn: n.dyn || null,
+              ghost: !!n.ghost,
+              slur: n.slur || null
             };
           })
         };
