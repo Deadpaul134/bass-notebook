@@ -157,7 +157,7 @@
           }
           if (first && box.index > 0) {
             ctx.save();
-            ctx.setFont("Heebo, sans-serif", 11, "");
+            ctx.setFont("Heebo, sans-serif", 8, "");
             ctx.setFillStyle(ink.muted);
             ctx.fillText(String(box.index + 1), box.x + 2, staves[1].getYForLine(0) - 14);
             ctx.restore();
@@ -233,7 +233,7 @@
                 beam.setStyle({ fillStyle: ink.text, strokeStyle: ink.text });
                 beam.setContext(ctx).draw();
               });
-            } catch (err) { /* keep the staff */ }
+            } catch (err) { if (window.BN_DEBUG) console.error(err); }
             box.slots[staffNum].forEach(function (slot) {
               try {
                 var bb = slot.note.getBoundingBox();
@@ -253,7 +253,7 @@
               var md = slot.model;
               if (md.dyn && !md.rest) {
                 ctx.save();
-                ctx.setFont("Times New Roman, serif", 15, "bold italic");
+                ctx.setFont("Times New Roman, serif", 11, "bold", "italic");
                 ctx.setFillStyle(ink.text);
                 ctx.fillText(md.dyn, slot.headX - 2, stave.getYForLine(4) + LINE * 3.2);
                 ctx.restore();

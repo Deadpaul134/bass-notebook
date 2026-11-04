@@ -32,8 +32,30 @@ async function locate(page, spec) {
   }, spec);
 }
 
+/* The floating Keypad may sit over the staff; hide it when a test needs to touch what is under it. */
+async function uncover(page, x, y) {
+  const covered = await page.evaluate(({ x, y }) => {
+    /* touch hit-testing is fuzzy, so look around the point as well */
+    return [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14]].some(([dx, dy]) => {
+      const el = document.elementFromPoint(x + dx, y + dy);
+      return !!(el && el.closest("#keypad, #ctx"));
+    });
+  }, { x, y });
+  if (covered) {
+    await page.evaluate((px) => {
+      const k = document.getElementById("keypad");
+      const ui = BN.ui.get().keypad;
+      const key = innerHeight > innerWidth ? "portrait" : "landscape";
+      ui[key] = { x: px < innerWidth / 2 ? innerWidth - k.offsetWidth - 4 : 4, y: innerHeight - k.offsetHeight - 4 };
+      BN.ui.set({ keypad: ui });
+      BN.ui.keypad.place();
+    }, x);
+  }
+}
+
 async function tapStaff(page, spec) {
   const pt = await locate(page, spec);
+  await uncover(page, pt.x, pt.y);
   await page.mouse.click(pt.x, pt.y);
   await page.waitForTimeout(20);
 }
@@ -83,6 +105,7 @@ async function clickNote(page, id) {
     r = BN.render.noteRect(nid);
     return { x: r.cx, y: r.cy };
   }, id);
+  await uncover(page, pt.x, pt.y);
   await page.mouse.click(pt.x, pt.y);
   await page.waitForTimeout(30);
 }
@@ -123,4 +146,4 @@ async function touchGesture(page, points) {
 
 function isPortrait(testInfo) { return testInfo.project.name === "tablet-portrait"; }
 
-module.exports = { freshApp, newScore, locate, tapStaff, getModel, written, names, fill, noteId, clickNote, selectNote, box, keypadDrag, touchGesture, isPortrait };
+module.exports = { uncover, freshApp, newScore, locate, tapStaff, getModel, written, names, fill, noteId, clickNote, selectNote, box, keypadDrag, touchGesture, isPortrait };

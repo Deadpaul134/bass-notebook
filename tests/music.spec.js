@@ -43,3 +43,17 @@ test("pitch round-trip, keys, and accidentals", async ({ page }) => {
   expect(result.names).toContain("F#");
   expect(result.names).toHaveLength(15);
 });
+
+test("midi spelling, names, and duration labels", async ({ page }) => {
+  await freshApp(page);
+  const r = await page.evaluate(() => ({
+    sharp: BN.music.midiToPitch(46, { fifths: 0 }),
+    flat: BN.music.midiToPitch(46, { fifths: -1 }),
+    name: BN.music.pitchName({ step: "F", alter: 1, octave: 3 }),
+    dur: BN.music.durationLabel("quarter", 1)
+  }));
+  expect(r.sharp).toEqual({ step: "A", alter: 1, octave: 2 });
+  expect(r.flat).toEqual({ step: "B", alter: -1, octave: 2 });
+  expect(r.name).toBe("F♯3");
+  expect(r.dur).toBe("רבע מנוקד");
+});

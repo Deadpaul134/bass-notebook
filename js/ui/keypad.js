@@ -208,7 +208,7 @@
       root.style[side] = "24px";
       var dock = document.getElementById("piano-dock");
       var below = dock ? dock.getBoundingClientRect().top : window.innerHeight;
-      root.style.bottom = Math.max(8, window.innerHeight - below + 12) + "px";
+      root.style.bottom = Math.max(8, window.innerHeight - below + 6) + "px";
     }
     var side2 = BN.data.settings().hand === "left" ? "right" : "left";
     showBtn.style.left = showBtn.style.right = "";

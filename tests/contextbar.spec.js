@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { freshApp, newScore, getModel, written, names, fill, selectNote, clickNote, noteId, box } = require("./helpers");
+const { uncover, freshApp, newScore, getModel, written, names, fill, selectNote, clickNote, noteId, box } = require("./helpers");
 
 test.beforeEach(async ({ page }) => {
   await freshApp(page);
@@ -88,9 +88,10 @@ test("a measure can be selected, then the whole row, with actions on the range",
 test("long press and drag selects a range (lasso)", async ({ page }) => {
   const a = await page.evaluate((id) => BN.render.noteRect(id), await noteId(page, 0));
   const b = await page.evaluate((id) => BN.render.noteRect(id), await noteId(page, 2));
+  await uncover(page, a.cx, a.cy);
   await page.mouse.move(a.cx, a.cy);
   await page.mouse.down();
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(800);
   await page.mouse.move(b.cx, b.cy, { steps: 6 });
   await page.mouse.up();
   expect((await page.evaluate(() => BN.state.selection)).length).toBe(3);
@@ -100,9 +101,10 @@ test("long press and drag selects a range (lasso)", async ({ page }) => {
 test("long press on a second note extends the selection", async ({ page }) => {
   await selectNote(page, 0);
   const b = await page.evaluate((id) => BN.render.noteRect(id), await noteId(page, 3));
+  await uncover(page, b.cx, b.cy);
   await page.mouse.move(b.cx, b.cy);
   await page.mouse.down();
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(800);
   await page.mouse.up();
   expect((await page.evaluate(() => BN.state.selection)).length).toBe(4);
 });

@@ -33,3 +33,25 @@ test("MusicXML export and round-trip", async ({ page }) => {
   expect(result.tie).toBeGreaterThan(0);
   expect(result.same).toBe(true);
 });
+
+test("marks, dynamics, slurs, ghost notes, and repeats round-trip", async ({ page }) => {
+  await freshApp(page);
+  const r = await page.evaluate(() => {
+    const s = BN.model.blank({ title: "סימנים", composer: "פול" });
+    const mk = (step) => BN.model.noteFromPalette({ type: "quarter", staff: 1 }, { step, alter: 0, octave: 2 });
+    const a = mk("G"); a.artic = ["staccato", "fermata"]; a.dyn = "mf"; a.slur = { start: true };
+    const b = mk("A"); b.ghost = true; b.slur = { stop: true };
+    BN.model.append(s, 1, a); BN.model.append(s, 1, b);
+    BN.model.setRepeat(s, 0, "forward");
+    BN.model.setRepeat(s, 0, "backward");
+    const xml = BN.musicxml.export(s);
+    const back = BN.musicxml.roundTrip(s);
+    return { xml, same: JSON.stringify(BN.musicxml.signature(s)) === JSON.stringify(BN.musicxml.signature(back)), sig: BN.musicxml.signature(back).measures[0] };
+  });
+  expect(r.xml).toContain("<staccato/>");
+  expect(r.xml).toContain("<notehead>x</notehead>");
+  expect(r.xml).toContain("<mf/>");
+  expect(r.xml).toContain('<repeat direction="backward"/>');
+  expect(r.xml).toContain("<creator");
+  expect(r.same).toBe(true);
+});

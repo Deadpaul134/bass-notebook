@@ -782,7 +782,7 @@
         scale: S.zoom || 1,
         selectedIds: sel,
         selMeasures: S.selMeasures || [],
-        cursor: cursor(),
+        cursor: sel.length || (S.selMeasures && S.selMeasures.length) ? null : cursor(),
         playingId: S.playingId
       });
       BN.editor.lastDrawMs = performance.now() - t0;

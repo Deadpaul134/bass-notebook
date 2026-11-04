@@ -353,7 +353,7 @@
       if (!measures.length) {
         measures.push({
           number: 1,
-          attributes: { key: { fifths: 0, mode: "major" }, time: { beats: 4, beatType: 4 }, clefs: defaultClefs(score.staffLayout) },
+          attributes: { key: clone(keys[0].key), time: clone(times[0].time), clefs: defaultClefs(score.staffLayout) },
           notes: []
         });
       }

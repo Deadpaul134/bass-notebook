@@ -217,13 +217,13 @@ button:disabled { opacity: 0.4; cursor: default; }
   min-height: 100%;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  padding: 16px 30px 70px;
+  padding: 28px 30px 70px;
   position: relative;
   color: var(--ink);
 }
 .paper h1 { font-size: 22px; line-height: 1.2; margin: 0; text-align: center; font-weight: 600; min-height: 26px; }
-.paper .meta { display: flex; justify-content: space-between; font-size: 13px; color: #555; margin-top: 2px; min-height: 18px; }
-#score { direction: ltr; margin-top: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+.paper .meta { display: flex; justify-content: space-between; font-size: 13px; color: #555; margin-top: 8px; min-height: 18px; }
+#score { direction: ltr; margin-top: 8px; touch-action: none; user-select: none; -webkit-user-select: none; }
 #score .system { line-height: 0; }
 #score svg { overflow: visible; }
 .status { position: absolute; bottom: 56px; right: 44px; font-size: 12px; color: #555; pointer-events: none; }
