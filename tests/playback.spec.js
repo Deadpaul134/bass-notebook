@@ -101,3 +101,14 @@ test("play from the cursor moves the playhead and stops at the end; loop restart
   await expect(page.locator("#score .playhead")).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => BN.playback.isPlaying()), { timeout: 8000 }).toBe(false);
 });
+
+test("piano samples are served and decode", async ({ page, request }) => {
+  await freshApp(page);
+  const res = await request.get("/assets/piano/A0.mp3");
+  expect(res.status()).toBe(200);
+  const loaded = await page.evaluate(async () => {
+    const ok = await BN.playback.loadSamples();
+    return { ok, state: BN.playback.samples.loaded, count: BN.playback.samples.count, failed: BN.playback.samples.failed };
+  });
+  expect(loaded).toEqual({ ok: true, state: true, count: 26, failed: false });
+});

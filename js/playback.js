@@ -1,4 +1,4 @@
-/* Look-ahead playback. Synth only: saw bass, triangle piano. */
+/* Look-ahead playback. Sampled piano (Salamander Grand, CC BY 3.0); synth fallback if samples fail. */
 (function () {
   "use strict";
   var BN = (window.BN = window.BN || {});
@@ -32,7 +32,76 @@
     limiter.attack.value = 0.003;
     limiter.release.value = 0.2;
     limiter.connect(audio.destination);
+    loadSamples();
     return audio;
+  }
+
+  var NAMES = ["A0", "C1", "Ds1", "Fs1", "A1", "C2", "Ds2", "Fs2", "A2", "C3", "Ds3", "Fs3", "A3", "C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "Ds6", "Fs6", "A6", "C7"];
+  var SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  var samples = [];
+  var sampleState = { loaded: false, failed: false, count: 0, promise: null };
+
+  function nameToMidi(name) {
+    var m = /^([A-G])(s?)(\d)$/.exec(name);
+    return 12 * (Number(m[3]) + 1) + SEMI[m[1]] + (m[2] ? 1 : 0);
+  }
+
+  function loadSamples() {
+    if (sampleState.promise) return sampleState.promise;
+    var ctx = audio;
+    if (!ctx || !window.fetch) return Promise.resolve(false);
+    sampleState.promise = Promise.all(NAMES.map(function (name) {
+      return fetch("assets/piano/" + name + ".mp3").then(function (res) {
+        if (!res.ok) throw new Error(name + " " + res.status);
+        return res.arrayBuffer();
+      }).then(function (data) {
+        return new Promise(function (ok, bad) {
+          var p = ctx.decodeAudioData(data, ok, bad);
+          if (p && p.catch) p.catch(bad);
+        });
+      }).then(function (buffer) {
+        return { midi: nameToMidi(name), buffer: buffer };
+      });
+    })).then(function (list) {
+      samples = list.sort(function (a, b) { return a.midi - b.midi; });
+      sampleState.count = samples.length;
+      sampleState.loaded = true;
+      return true;
+    }).catch(function () {
+      samples = [];
+      sampleState.failed = true;
+      return false;
+    });
+    return sampleState.promise;
+  }
+
+  function nearest(midi) {
+    var best = null;
+    samples.forEach(function (s) {
+      if (!best || Math.abs(s.midi - midi) < Math.abs(best.midi - midi)) best = s;
+    });
+    return best;
+  }
+
+  function sampled(ctx, when, midi, dur, gain) {
+    var s = nearest(midi);
+    var src = ctx.createBufferSource();
+    src.buffer = s.buffer;
+    src.playbackRate.value = Math.pow(2, (midi - s.midi) / 12);
+    var vol = BN.data && BN.data.settings ? BN.data.settings().volume : 0.8;
+    var loud = Math.max(0.0001, 0.9 * (gain || 1) * (vol == null ? 0.8 : vol));
+    var end = when + Math.max(0.08, dur);
+    var release = 0.4;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(loud, when + 0.005);
+    g.gain.setTargetAtTime(loud * 0.55, when + 0.02, 1.5);
+    g.gain.setValueAtTime(loud * (0.55 + 0.45 * Math.exp(-(end - when - 0.02) / 1.5)), end);
+    g.gain.setTargetAtTime(0, end, release / 4);
+    src.connect(g);
+    g.connect(limiter || ctx.destination);
+    src.start(when);
+    src.stop(end + release + 0.1);
   }
 
   function secPerTick(score, rate) {
@@ -126,6 +195,11 @@
   }
 
   function voice(ctx, when, midi, dur, kind, gain) {
+    if (samples.length) return sampled(ctx, when, midi, dur, gain);
+    synth(ctx, when, midi, dur, kind, gain);
+  }
+
+  function synth(ctx, when, midi, dur, kind, gain) {
     var freq = BN.music.midiToFreq(midi);
     var filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
@@ -226,6 +300,11 @@
   BN.playback = {
     clock: null,
     eventsFor: eventsFor,
+    samples: sampleState,
+    loadSamples: function () {
+      ensure();
+      return loadSamples();
+    },
     instrument: instrument,
     noteAt: noteAt,
     cursorFor: cursorFor,

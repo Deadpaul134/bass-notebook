@@ -15,6 +15,7 @@ No GPL, LGPL, AGPL, or CC BY-SA code or fonts are included. All icons in the int
 | `vendor/svg2pdf/svg2pdf.umd.min.js` | svg2pdf.js | 2.2.4 | MIT, © yWorks GmbH; contains MIT code © 2013-2015 Vitaly Puzrin (svgpath) |
 | `vendor/svg2pdf/LICENSE` | license text | — | — |
 | `assets/fonts/heebo-hebrew.woff2`, `heebo-latin.woff2`, `OFL.txt` | Heebo | Google Fonts v28 | SIL OFL 1.1 |
+| `assets/piano/*.mp3` (26 files, A0–C7 every minor third) | Salamander Grand Piano V3 samples by Alexander Holm, as hosted at https://tonejs.github.io/audio/salamander/ | — | CC BY 3.0 |
 
 `docs/v3/vendor/vexflow.js` (VexFlow 4.2.5, MIT) is only a copy used for the design mockup in `docs/v3/`; it is not loaded by the application.
 
@@ -420,3 +421,7 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
+
+## Salamander Grand Piano — CC BY 3.0
+
+Piano playback samples in `assets/piano/` (26 MP3 files, notes A0 to C7 every minor third) are from the "Salamander Grand Piano" (Yamaha C5) by Alexander Holm, licensed under Creative Commons Attribution 3.0 (https://creativecommons.org/licenses/by/3.0/). Source: https://archive.org/details/SalamanderGrandPianoV3 , MP3 versions via https://tonejs.github.io/audio/salamander/ . The files are used unmodified; the app only changes their playback speed to reach other pitches. No Avid assets are used.

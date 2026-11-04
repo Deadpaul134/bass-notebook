@@ -1,5 +1,5 @@
 /* Bass Notebook service worker — cache-first, relative to the page directory. */
-var CACHE_VERSION = "bass-notebook-v5-v3-ui";
+var CACHE_VERSION = "bass-notebook-v6-piano-samples";
 var ASSETS = [
   "./",
   "./index.html",
@@ -40,7 +40,33 @@ var ASSETS = [
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
   "./assets/icons/icon-maskable-192.png",
-  "./assets/icons/icon-maskable-512.png"
+  "./assets/icons/icon-maskable-512.png",
+  "./assets/piano/A0.mp3",
+  "./assets/piano/A1.mp3",
+  "./assets/piano/A2.mp3",
+  "./assets/piano/A3.mp3",
+  "./assets/piano/A4.mp3",
+  "./assets/piano/A5.mp3",
+  "./assets/piano/A6.mp3",
+  "./assets/piano/C1.mp3",
+  "./assets/piano/C2.mp3",
+  "./assets/piano/C3.mp3",
+  "./assets/piano/C4.mp3",
+  "./assets/piano/C5.mp3",
+  "./assets/piano/C6.mp3",
+  "./assets/piano/C7.mp3",
+  "./assets/piano/Ds1.mp3",
+  "./assets/piano/Ds2.mp3",
+  "./assets/piano/Ds3.mp3",
+  "./assets/piano/Ds4.mp3",
+  "./assets/piano/Ds5.mp3",
+  "./assets/piano/Ds6.mp3",
+  "./assets/piano/Fs1.mp3",
+  "./assets/piano/Fs2.mp3",
+  "./assets/piano/Fs3.mp3",
+  "./assets/piano/Fs4.mp3",
+  "./assets/piano/Fs5.mp3",
+  "./assets/piano/Fs6.mp3"
 ];
 
 self.addEventListener("install", function (event) {
