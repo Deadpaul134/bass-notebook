@@ -1,5 +1,5 @@
 /* Bass Notebook service worker — cache-first, relative to the page directory. */
-var CACHE_VERSION = "bass-notebook-v4";
+var CACHE_VERSION = "bass-notebook-v5-v3-ui";
 var ASSETS = [
   "./",
   "./index.html",
@@ -15,6 +15,19 @@ var ASSETS = [
   "./js/playback.js",
   "./js/musicxml.js",
   "./js/export.js",
+  "./js/ui/icons.js",
+  "./js/ui/toast.js",
+  "./js/ui/ghost.js",
+  "./js/ui/pop.js",
+  "./js/ui/actions.js",
+  "./js/ui/topbar.js",
+  "./js/ui/ribbon.js",
+  "./js/ui/keypad-layouts.js",
+  "./js/ui/keypad.js",
+  "./js/ui/contextbar.js",
+  "./js/ui/piano.js",
+  "./js/ui/list.js",
+  "./js/ui/settings.js",
   "./js/editor.js",
   "./js/app.js",
   "./vendor/vexflow/vexflow-bravura.js",
