@@ -14,13 +14,17 @@
       var systems = [];
       var current = [];
       var used = 0;
-      function widthOf(measure) {
-        return Math.max(120, 70 + measureNotes(measure) * 26 + (measure.attributes ? 56 : 0));
+      var MAX = 4;
+      function widthOf(measure, index) {
+        var fifths = Math.abs(BN.model.keyOf(part, index).fifths || 0);
+        var head = 44 + fifths * 10 + (index === 0 ? 30 : 0);
+        var extra = measure.attributes && index > 0 ? 40 + fifths * 10 : 0;
+        return Math.max(120, 70 + measureNotes(measure) * 26 + extra) + head * 0.6;
       }
       part.measures.forEach(function (measure, index) {
-        var w = widthOf(measure);
+        var w = widthOf(measure, index);
         var tooWide = current.length && used + w > usable;
-        var tooMany = current.length >= 5;
+        var tooMany = current.length >= MAX;
         if (tooWide || tooMany) {
           systems.push(current);
           current = [];
@@ -33,7 +37,7 @@
         }
         current.push({ index: index, min: w });
         used += w;
-        if (current.length === 5) {
+        if (current.length === MAX) {
           systems.push(current);
           current = [];
           used = 0;

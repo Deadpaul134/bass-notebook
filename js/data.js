@@ -7,7 +7,8 @@
     index: "bass-notebook-v2-index",
     settings: "bass-notebook-v1-settings",
     backup: "bass-notebook-v1-last-backup",
-    opened: "bass-notebook-v1-opened"
+    opened: "bass-notebook-v1-opened",
+    ui: "bass-notebook-v3-ui"
   };
   BN.readJSON = function (key, fallback) {
     try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; }
@@ -161,7 +162,7 @@
   };
   BN.data = {
     settings: function () {
-      return Object.assign({ clef: "bass", hand: "right", metronome: false, countIn: false, volume: 0.8, sound: "synth" }, BN.readJSON(BN.KEYS.settings, {}));
+      return Object.assign({ clef: "bass", hand: "right", metronome: false, countIn: false, volume: 0.8, sound: "synth", playback: true, dragEntry: true, tapInput: true, composer: "" }, BN.readJSON(BN.KEYS.settings, {}));
     },
     saveSettings: function (patch) {
       var next = Object.assign(BN.data.settings(), patch || {});
@@ -169,5 +170,29 @@
       return next;
     }
   };
-  BN.state = { current: null, selection: [], palette: { type: "quarter", dots: 0, rest: false, tie: false, accidental: null, select: false }, playingId: null, playing: false };
+  /* View state that survives reloads: Keypad position per orientation, Keypad hidden, piano open. */
+  BN.ui = {
+    get: function () {
+      return Object.assign({ keypad: { landscape: null, portrait: null, hidden: false, tab: 0 }, pianoOpen: true }, BN.readJSON(BN.KEYS.ui, {}));
+    },
+    set: function (patch) {
+      var next = Object.assign(BN.ui.get(), patch || {});
+      try { BN.writeJSON(BN.KEYS.ui, next); } catch (e) { /* storage full or blocked */ }
+      return next;
+    }
+  };
+  BN.state = {
+    current: null,
+    selection: [],
+    selMeasures: [],
+    cursor: null,
+    palette: { type: "quarter", dots: 0, tie: false, accidental: null },
+    zoom: 1,
+    rate: 1,
+    loop: false,
+    tab: "input",
+    clipboard: [],
+    playingId: null,
+    playing: false
+  };
 })();

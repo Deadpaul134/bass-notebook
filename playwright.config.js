@@ -27,7 +27,7 @@ module.exports = defineConfig({
       name: "tablet",
       use: {
         browserName: "chromium",
-        viewport: { width: 1138, height: 712 },
+        viewport: { width: 1280, height: 800 },
         hasTouch: true,
         isMobile: true,
         deviceScaleFactor: 1
@@ -37,7 +37,7 @@ module.exports = defineConfig({
       name: "tablet-portrait",
       use: {
         browserName: "chromium",
-        viewport: { width: 712, height: 1138 },
+        viewport: { width: 800, height: 1280 },
         hasTouch: true,
         isMobile: true,
         deviceScaleFactor: 1

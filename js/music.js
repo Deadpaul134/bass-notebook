@@ -1,4 +1,4 @@
-/* Bass Notebook v2 — pitch, keys, durations. Pure. */
+/* Pitch, keys, durations. Pure. */
 (function () {
   "use strict";
   var BN = (window.BN = window.BN || {});
@@ -146,8 +146,34 @@
     return "natural";
   }
 
+
+  var DUR_NAMES = { whole: "שלמה", half: "חצי", quarter: "רבע", eighth: "שמינית", "16th": "שש־עשרית" };
+  var DUR_ORDER = ["whole", "half", "quarter", "eighth", "16th"];
+  var SHARP_NAMES = [["C", 0], ["C", 1], ["D", 0], ["D", 1], ["E", 0], ["F", 0], ["F", 1], ["G", 0], ["G", 1], ["A", 0], ["A", 1], ["B", 0]];
+  var FLAT_NAMES = [["C", 0], ["D", -1], ["D", 0], ["E", -1], ["E", 0], ["F", 0], ["G", -1], ["G", 0], ["A", -1], ["A", 0], ["B", -1], ["B", 0]];
+
+  /* Spell a MIDI number; black keys follow the key signature (flats in flat keys). */
+  function midiToPitch(midi, key) {
+    var names = key && key.fifths < 0 ? FLAT_NAMES : SHARP_NAMES;
+    var row = names[((midi % 12) + 12) % 12];
+    return { step: row[0], alter: row[1], octave: Math.floor(midi / 12) - 1 };
+  }
+
+  function pitchName(pitch) {
+    if (!pitch) return "";
+    return pitch.step + (pitch.alter === 1 ? "♯" : pitch.alter === -1 ? "♭" : "") + pitch.octave;
+  }
+
+  function durationLabel(type, dots) {
+    return (DUR_NAMES[type] || "") + (dots === 1 ? " מנוקד" : dots === 2 ? " כפול־נקודה" : "");
+  }
+
   BN.music = {
     DIV: DIV,
+    DUR_ORDER: DUR_ORDER,
+    midiToPitch: midiToPitch,
+    pitchName: pitchName,
+    durationLabel: durationLabel,
     STEPS: STEPS,
     MAJOR: MAJOR,
     MINOR_OF: MINOR_OF,

@@ -1,20 +1,24 @@
 /* VexFlow engraving and hit testing.
-   Staff lines are wider than the VexFlow default so a finger can tell one
-   diatonic step from the next. The SVG is then scaled onto the page. */
+   One SVG per system. Staff lines are 10 units apart; `scale` (zoom) maps units to CSS pixels. */
 (function () {
   "use strict";
   var BN = (window.BN = window.BN || {});
-  var SCALE = 2.4;
-  var LINE = 16;
+  var LINE = 10;
+  var NS = "http://www.w3.org/2000/svg";
 
   function vf() { return window.Vex && window.Vex.Flow; }
 
   function colors() {
     var s = getComputedStyle(document.documentElement);
+    function v(name, dflt) { return (s.getPropertyValue(name) || dflt).trim() || dflt; }
     return {
-      text: (s.getPropertyValue("--text") || "#3b2f28").trim(),
-      staff: (s.getPropertyValue("--staff-line") || "#8a7868").trim(),
-      accent: (s.getPropertyValue("--accent") || "#de7a60").trim()
+      text: v("--ink", "#16181c"),
+      staff: v("--ink", "#16181c"),
+      accent: v("--accent", "#6b4ee6"),
+      select: v("--select", "#1f6fe0"),
+      selectSoft: v("--select-soft", "rgba(31,111,224,.12)"),
+      play: v("--play", "#2e9d62"),
+      muted: "#555a63"
     };
   }
 
@@ -23,8 +27,9 @@
     return (map[note.type] || "q") + (note.rest ? "r" : "");
   }
 
-  function keyName(pitch) {
-    return pitch.step.toLowerCase() + "/" + pitch.octave;
+  function keyName(note) {
+    var p = note.pitch;
+    return p.step.toLowerCase() + "/" + p.octave + (note.ghost ? "/x2" : "");
   }
 
   function restKey(sign) { return sign === "G" ? "b/4" : "d/3"; }
@@ -34,38 +39,52 @@
   function tune(stave) {
     if (!stave.options) return stave;
     stave.options.spacing_between_lines_px = LINE;
-    stave.options.space_above_staff_ln = 4;
-    stave.options.space_below_staff_ln = 4;
+    stave.options.space_above_staff_ln = 5;
+    stave.options.space_below_staff_ln = 7;
     if (typeof stave.resetLines === "function") stave.resetLines();
     return stave;
   }
 
   function systemBox(grand) {
-    var yT = LINE + 8;
-    var yB = yT + LINE * 8;
-    var below = (4 + 9) * LINE + 28;
-    return { yT: yT, yB: yB, height: (grand ? yB : yT) + below };
+    var yT = 4;
+    var yB = yT + LINE * 10;
+    return { yT: yT, yB: yB, height: (grand ? yB : yT) + LINE * 16 };
+  }
+
+  function svgEl(name, attrs) {
+    var el = document.createElementNS(NS, name);
+    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    return el;
+  }
+
+  function signFor(score, staffNum) {
+    if (score.staffLayout === "grand") return staffNum === 1 ? "G" : "F";
+    return score.staffLayout === "treble" ? "G" : "F";
   }
 
   BN.render = {
     layout: null,
-    scale: SCALE,
+    LINE: LINE,
     draw: function (score, host, opts) {
       opts = opts || {};
       var Flow = vf();
       if (!Flow || !score) return null;
       var ink = opts.colors || colors();
+      var scale = opts.scale || 1;
       var cssWidth = opts.width || host.clientWidth || 800;
-      var userWidth = Math.max(240, cssWidth / SCALE);
+      var userWidth = Math.max(240, cssWidth / scale);
       var systems = BN.layout.systems(score, userWidth);
       var part = score.parts[0];
       var grand = score.staffLayout === "grand";
       var frame = systemBox(grand);
       var height = frame.height;
       host.innerHTML = "";
-      var map = { systems: [], byMeasure: {}, notes: {}, svg: [] };
+      var map = { systems: [], byMeasure: {}, notes: {}, svg: [], scale: scale };
       var selected = (opts.selectedIds || []).reduce(function (a, id) { a[id] = true; return a; }, {});
+      var selMeasures = (opts.selMeasures || []).reduce(function (a, i) { a[i] = true; return a; }, {});
       var playing = opts.playingId || null;
+      var built = {};
+      var allOrder = { 1: [], 2: [] };
       systems.forEach(function (system, si) {
         var wrap = document.createElement("div");
         wrap.className = "system";
@@ -76,11 +95,10 @@
         renderer.resize(viewW, height);
         var ctx = renderer.getContext();
         var svg = wrap.querySelector("svg");
-        var shown = cssWidth / viewW;
-        var box = svg.viewBox && svg.viewBox.baseVal;
-        var vbW = box && box.width ? box.width : viewW;
-        var vbH = box && box.height ? box.height : height;
-        shown = cssWidth / vbW;
+        var box0 = svg.viewBox && svg.viewBox.baseVal;
+        var vbW = box0 && box0.width ? box0.width : viewW;
+        var vbH = box0 && box0.height ? box0.height : height;
+        var shown = cssWidth / vbW;
         svg.setAttribute("width", String(Math.round(cssWidth)));
         svg.setAttribute("height", String(Math.ceil(vbH * shown)));
         svg.style.width = cssWidth + "px";
@@ -90,99 +108,112 @@
         svg.setAttribute("data-system", String(si));
         map.svg.push(svg);
         var boxes = [];
-        system.measures.forEach(function (box) {
+        system.measures.forEach(function (box, bi) {
           var measure = part.measures[box.index];
-          var yT = frame.yT;
-          var yB = frame.yB;
           var staves = [];
-          function make(y, staffNum, sign) {
+          var first = bi === 0;
+          function make(y, sign) {
             var stave = tune(new Flow.Stave(box.x, y, box.w));
-            if (box === system.measures[0]) {
-              stave.addClef(sign === "G" ? "treble" : "bass");
-              var key = BN.model.keyOf(part, box.index);
-              if ((key.fifths || 0) !== 0 || key.mode === "minor") stave.addKeySignature(BN.music.vfKey(key));
-              var time = BN.model.timeOf(part, box.index);
-              if ((si === 0 && box === system.measures[0]) || (measure.attributes && measure.attributes.time)) {
-                stave.addTimeSignature(time.beats + "/" + time.beatType);
+            var key = BN.model.keyOf(part, box.index);
+            var keyChanged = !!(measure.attributes && measure.attributes.key && box.index > 0);
+            if (first) stave.addClef(sign === "G" ? "treble" : "bass");
+            if (first || keyChanged) {
+              if ((key.fifths || 0) !== 0 || key.mode === "minor") {
+                stave.addKeySignature(BN.music.vfKey(key), keyChanged ? BN.music.vfKey(BN.model.keyOf(part, box.index - 1)) : undefined);
+              } else if (keyChanged) {
+                stave.addKeySignature("C", BN.music.vfKey(BN.model.keyOf(part, box.index - 1)));
               }
             }
-            /* Tempo is the HTML label. VexFlow's tempo glyph stays black in dark mode. */
+            if (box.index === 0 || (measure.attributes && measure.attributes.time && box.index > 0)) {
+              var time = BN.model.timeOf(part, box.index);
+              stave.addTimeSignature(time.beats + "/" + time.beatType);
+            }
             if (measure.barline) {
-              var mapBar = { regular: "single", "light-light": "double", "light-heavy": "end" };
               var Bar = Flow.Barline.type;
-              var kind = mapBar[measure.barline.right] || "single";
               if (measure.barline.repeat === "backward") stave.setEndBarType(Bar.REPEAT_END);
-              else if (kind === "double") stave.setEndBarType(Bar.DOUBLE);
-              else if (kind === "end") stave.setEndBarType(Bar.END);
-              else stave.setEndBarType(Bar.SINGLE);
+              else if (measure.barline.right === "light-light") stave.setEndBarType(Bar.DOUBLE);
+              else if (measure.barline.right === "light-heavy") stave.setEndBarType(Bar.END);
               if (measure.barline.repeat === "forward") stave.setBegBarType(Bar.REPEAT_BEGIN);
             }
             stave.setContext(ctx).setStyle({ strokeStyle: ink.staff, fillStyle: ink.staff }).draw();
             return stave;
           }
           if (grand) {
-            staves[1] = make(yT, 1, "G");
-            staves[2] = make(yB, 2, "F");
-            ctx.openGroup("brace");
-            var brace = new Flow.StaveConnector(staves[1], staves[2]);
-            brace.setType(Flow.StaveConnector.type.BRACE).setContext(ctx).draw();
-            ctx.closeGroup();
-            new Flow.StaveConnector(staves[1], staves[2]).setType("singleLeft").setContext(ctx).draw();
+            staves[1] = make(frame.yT, "G");
+            staves[2] = make(frame.yB, "F");
+            if (first) {
+              ctx.openGroup("brace");
+              var brace = new Flow.StaveConnector(staves[1], staves[2]);
+              brace.setType(Flow.StaveConnector.type.BRACE).setContext(ctx).draw();
+              ctx.closeGroup();
+              new Flow.StaveConnector(staves[1], staves[2]).setType("singleLeft").setContext(ctx).draw();
+            }
             var right = "singleRight";
             if (measure.barline && measure.barline.right === "light-heavy") right = "boldDoubleRight";
             if (measure.barline && measure.barline.right === "light-light") right = "thinDouble";
             new Flow.StaveConnector(staves[1], staves[2]).setType(right).setContext(ctx).draw();
           } else {
-            var sign = score.staffLayout === "treble" ? "G" : "F";
-            staves[1] = make(yT, 1, sign);
+            staves[1] = make(frame.yT, signFor(score, 1));
+          }
+          if (first && box.index > 0) {
+            ctx.save();
+            ctx.setFont("Heebo, sans-serif", 8, "");
+            ctx.setFillStyle(ink.muted);
+            ctx.fillText(String(box.index + 1), box.x + 2, staves[1].getYForLine(0) - 14);
+            ctx.restore();
           }
           boxes.push({ index: box.index, x: box.x, w: box.w, staves: staves, slots: { 1: [], 2: [] } });
         });
-        if (si === 0) {
-          var label = document.createElement("div");
-          label.className = "tempo-label";
-          label.textContent = "♩ = " + score.tempo.bpm;
-          wrap.insertBefore(label, wrap.firstChild);
-        }
         boxes.forEach(function (box) {
           var measure = part.measures[box.index];
+          var time = BN.model.timeOf(part, box.index);
           [1, 2].forEach(function (staffNum) {
             if (!box.staves[staffNum]) return;
             var stave = box.staves[staffNum];
             var notes = measure.notes.filter(function (n) { return n.staff === staffNum; });
             if (!notes.length) return;
-            var sign = "F";
-            if (grand) sign = staffNum === 1 ? "G" : "F";
-            else if (score.staffLayout === "treble") sign = "G";
+            var sign = signFor(score, staffNum);
             var clefName = sign === "G" ? "treble" : "bass";
             var tickables = [];
             var builtIds = [];
             var key = BN.model.keyOf(part, box.index);
             notes.forEach(function (note, ni) {
-              var built;
+              var made;
               try {
-                built = new Flow.StaveNote({
+                made = new Flow.StaveNote({
                   clef: clefName,
-                  keys: [note.rest ? restKey(sign) : keyName(note.pitch)],
+                  keys: [note.rest ? restKey(sign) : keyName(note)],
                   duration: durString(note),
                   auto_stem: !note.rest
                 });
-              } catch (err) { return; }
-              if (note.dots) for (var d = 0; d < note.dots; d++) built.addModifier(new Flow.Dot(), 0);
+              } catch (err) {
+                try {
+                  made = new Flow.StaveNote({ clef: clefName, keys: [note.rest ? restKey(sign) : keyName({ pitch: note.pitch })], duration: durString(note), auto_stem: !note.rest });
+                } catch (err2) { return; }
+              }
+              if (note.dots) for (var d = 0; d < note.dots; d++) Flow.Dot.buildAndAttach([made], { all: true });
               if (!note.rest) {
                 var show = BN.music.displayAccidental(notes, ni, key);
-                if (show) built.addModifier(new Flow.Accidental(show === "sharp" ? "#" : show === "flat" ? "b" : "n"), 0);
+                if (show) made.addModifier(new Flow.Accidental(show === "sharp" ? "#" : show === "flat" ? "b" : "n"), 0);
+                (note.artic || []).forEach(function (a) {
+                  var code = { staccato: "a.", accent: "a>", tenuto: "a-", fermata: "a@a" }[a];
+                  if (!code) return;
+                  var art = new Flow.Articulation(code);
+                  art.setPosition(a === "fermata" ? Flow.Modifier.Position.ABOVE : Flow.Modifier.Position.BELOW);
+                  made.addModifier(art, 0);
+                });
               }
-              var color = (selected[note.id] || playing === note.id) ? ink.accent : ink.text;
-              built.setStyle({ fillStyle: color, strokeStyle: color });
-              tickables.push(built);
+              var color = playing === note.id ? ink.play : selected[note.id] ? ink.select : ink.text;
+              made.setStyle({ fillStyle: color, strokeStyle: color });
+              tickables.push(made);
               builtIds.push(note.id);
+              built[note.id] = made;
+              allOrder[staffNum].push(note);
               var pitchY = note.rest ? stave.getYForLine(2) : yFor(stave, BN.music.pitchToPos(clefName, note.pitch));
-              map.notes[note.id] = { id: note.id, measure: box.index, staff: staffNum, system: si };
-              box.slots[staffNum].push({ id: note.id, note: built, pitchY: pitchY });
+              map.notes[note.id] = { id: note.id, measure: box.index, staff: staffNum, system: si, note: note };
+              box.slots[staffNum].push({ id: note.id, note: made, pitchY: pitchY, model: note });
             });
             if (!tickables.length) return;
-            var time = BN.model.timeOf(part, box.index);
             var voice = new Flow.Voice({ num_beats: time.beats, beat_value: time.beatType }).setMode(Flow.Voice.Mode.SOFT);
             voice.addTickables(tickables);
             var room = Math.max(40, stave.getNoteEndX() - stave.getNoteStartX() - 8);
@@ -202,20 +233,31 @@
                 beam.setStyle({ fillStyle: ink.text, strokeStyle: ink.text });
                 beam.setContext(ctx).draw();
               });
-            } catch (err) { /* keep the staff */ }
+            } catch (err) { if (window.BN_DEBUG) console.error(err); }
             box.slots[staffNum].forEach(function (slot) {
               try {
                 var bb = slot.note.getBoundingBox();
                 slot.x = bb.getX();
                 slot.w = Math.max(8, bb.getW());
+                slot.headX = slot.note.getAbsoluteX();
               } catch (err2) {
                 slot.x = stave.getNoteStartX();
                 slot.w = 12;
+                slot.headX = slot.x;
               }
-              map.notes[slot.id].x = slot.x;
-              map.notes[slot.id].w = slot.w;
-              map.notes[slot.id].pitchY = slot.pitchY;
-              map.notes[slot.id].svg = svg;
+              var m = map.notes[slot.id];
+              m.x = slot.x;
+              m.w = slot.w;
+              m.pitchY = slot.pitchY;
+              m.svg = svg;
+              var md = slot.model;
+              if (md.dyn && !md.rest) {
+                ctx.save();
+                ctx.setFont("Times New Roman, serif", 11, "bold", "italic");
+                ctx.setFillStyle(ink.text);
+                ctx.fillText(md.dyn, slot.headX - 2, stave.getYForLine(4) + LINE * 3.2);
+                ctx.restore();
+              }
             });
           });
           map.byMeasure[box.index] = {
@@ -229,20 +271,87 @@
             slots: box.slots
           };
         });
-        if (playing && map.notes[playing] && map.notes[playing].system === si) {
-          var meta = map.notes[playing];
-          var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          line.setAttribute("class", "playhead");
-          line.setAttribute("x1", meta.x + meta.w / 2);
-          line.setAttribute("x2", meta.x + meta.w / 2);
-          line.setAttribute("y1", "8");
-          line.setAttribute("y2", String(height - 8));
-          line.setAttribute("stroke", ink.accent);
-          line.setAttribute("stroke-width", "1.5");
-          svg.appendChild(line);
-        }
-        map.systems.push({ index: si, svg: svg, height: height });
+        map.systems.push({ index: si, svg: svg, height: height, measures: boxes.map(function (b) { return b.index; }) });
       });
+
+      /* Ties and slurs once every note has a position. */
+      [1, 2].forEach(function (staffNum) {
+        var list = allOrder[staffNum];
+        list.forEach(function (note, i) {
+          var a = built[note.id];
+          var nextNote = list[i + 1];
+          var drawTie = function (first, last, svgFor, ctxFor) {
+            try {
+              new Flow.StaveTie({ first_note: first, last_note: last, first_indices: [0], last_indices: [0] })
+                .setStyle({ strokeStyle: ink.text, fillStyle: ink.text }).setContext(ctxFor).draw();
+            } catch (err) { /* skip a tie VexFlow cannot place */ }
+          };
+          if (note.tie && note.tie.start && nextNote && nextNote.tie && nextNote.tie.stop) {
+            var b = built[nextNote.id];
+            var sa = map.notes[note.id].system;
+            var sb = map.notes[nextNote.id].system;
+            if (sa === sb) drawTie(a, b, null, a.getContext());
+            else {
+              drawTie(a, null, null, a.getContext());
+              drawTie(null, b, null, b.getContext());
+            }
+          }
+          if (note.slur && note.slur.start) {
+            var endIdx = -1;
+            for (var j = i + 1; j < list.length; j++) if (list[j].slur && list[j].slur.stop) { endIdx = j; break; }
+            if (endIdx > 0 && map.notes[list[endIdx].id].system === map.notes[note.id].system) {
+              try {
+                new Flow.Curve(a, built[list[endIdx].id], { position: Flow.Curve.Position.NEAR_TOP, position_end: Flow.Curve.Position.NEAR_TOP })
+                  .setContext(a.getContext()).draw();
+              } catch (err) { /* skip */ }
+            }
+          }
+        });
+      });
+
+      /* Selection background, cursor, playhead — drawn on top as translucent shapes. */
+      var topOf = function (box, staffNum) { return box.staves[staffNum].getYForLine(0); };
+      var botOf = function (box, staffNum) { return box.staves[staffNum].getYForLine(4); };
+      Object.keys(map.byMeasure).forEach(function (k) {
+        var box = map.byMeasure[k];
+        var staffCount = grand ? 2 : 1;
+        var y1 = topOf(box, 1) - LINE * 2;
+        var y2 = botOf(box, staffCount) + LINE * 3;
+        if (selMeasures[k]) {
+          box.svg.appendChild(svgEl("rect", { "class": "sel-bg", x: box.x, y: y1, width: box.w, height: y2 - y1, fill: ink.selectSoft }));
+        }
+        [1, 2].forEach(function (staffNum) {
+          var slots = (box.slots[staffNum] || []).filter(function (s) { return selected[s.id]; });
+          if (!slots.length) return;
+          var x1 = Math.min.apply(null, slots.map(function (s) { return s.headX; })) - 9;
+          var x2 = Math.max.apply(null, slots.map(function (s) { return s.headX; })) + 24;
+          var ya = topOf(box, staffNum) - LINE * 2;
+          var yb = botOf(box, staffNum) + LINE * 3;
+          box.svg.appendChild(svgEl("rect", { "class": "sel-bg", x: x1, y: ya, width: x2 - x1, height: yb - ya, fill: ink.selectSoft }));
+        });
+      });
+      var cur = opts.cursor;
+      if (cur && map.byMeasure[cur.measure]) {
+        var cbox = map.byMeasure[cur.measure];
+        var cstaff = Math.min(cur.staff || 1, grand ? 2 : 1);
+        var slots = cbox.slots[cstaff] || [];
+        var stave = cbox.staves[cstaff];
+        var cx;
+        if (slots[cur.index]) cx = slots[cur.index].headX - 8;
+        else if (slots.length) cx = Math.min(stave.getNoteEndX() - 4, slots[slots.length - 1].headX + 26);
+        else cx = stave.getNoteStartX() + 4;
+        cx = Math.max(cbox.x + 2, cx);
+        var cy1 = topOf(cbox, cstaff) - LINE * 1.5;
+        var cy2 = botOf(cbox, cstaff) + LINE * 1.5;
+        cbox.svg.appendChild(svgEl("rect", { "class": "cursor-line", x: cx, y: cy1, width: 3, height: cy2 - cy1, rx: 1, fill: ink.accent }));
+        map.cursor = { x: cx, y1: cy1, y2: cy2, svg: cbox.svg, measure: cur.measure, staff: cstaff };
+      }
+      if (playing && map.notes[playing]) {
+        var meta = map.notes[playing];
+        if (meta.svg) {
+          meta.svg.appendChild(svgEl("line", { "class": "playhead", x1: meta.x + meta.w / 2, x2: meta.x + meta.w / 2, y1: "6", y2: String(height - 6), stroke: ink.play, "stroke-width": "1.5" }));
+        }
+      }
       BN.render.layout = map;
       return map;
     },
@@ -275,13 +384,42 @@
       return Math.abs(b.y - a.y);
     },
 
-    pitchClient: function (hit) {
-      var box = BN.render.layout && BN.render.layout.byMeasure[hit.measure];
-      if (!box) return { x: 0, y: 0 };
-      var stave = box.staves[hit.staff] || box.staves[1];
-      var y = yFor(stave, hit.pos);
-      var x = hit.svg ? hit.svg.x : stave.getNoteStartX();
-      return BN.render.client(box.svg, x, y);
+    /* Client position of a pitch step at the cursor (or at x of a measure). */
+    posClient: function (measure, staff, pos, index) {
+      var map = BN.render.layout;
+      var box = map && map.byMeasure[measure];
+      if (!box) return null;
+      var stave = box.staves[staff] || box.staves[1];
+      var slots = box.slots[staff] || [];
+      var x;
+      if (slots[index]) x = slots[index].headX - 4;
+      else if (slots.length) x = Math.min(stave.getNoteEndX() - 12, slots[slots.length - 1].headX + 30);
+      else x = stave.getNoteStartX() + 18;
+      var p = BN.render.client(box.svg, x, yFor(stave, pos));
+      p.step = BN.render.stepPx(measure, staff);
+      return p;
+    },
+
+    /* Client rectangle of a drawn note head and its staff band. */
+    noteRect: function (id) {
+      var meta = BN.render.layout && BN.render.layout.notes[id];
+      if (!meta || !meta.svg) return null;
+      var box = BN.render.layout.byMeasure[meta.measure];
+      var stave = box.staves[meta.staff];
+      var a = BN.render.client(meta.svg, meta.x, stave.getYForLine(0) - LINE * 2);
+      var b = BN.render.client(meta.svg, meta.x + meta.w, stave.getYForLine(4) + LINE * 3);
+      var c = BN.render.client(meta.svg, meta.x + meta.w / 2, meta.pitchY || 0);
+      return { left: a.x, right: b.x, top: a.y, bottom: b.y, cx: c.x, cy: c.y };
+    },
+
+    measureRect: function (index) {
+      var map = BN.render.layout;
+      var box = map && map.byMeasure[index];
+      if (!box) return null;
+      var last = box.staves[2] || box.staves[1];
+      var a = BN.render.client(box.svg, box.x, box.staves[1].getYForLine(0) - LINE * 2);
+      var b = BN.render.client(box.svg, box.x + box.w, last.getYForLine(4) + LINE * 3);
+      return { left: a.x, right: b.x, top: a.y, bottom: b.y };
     },
 
     locate: function (spec) {
@@ -334,30 +472,31 @@
         }
         var stave = box.staves[staff];
         if (!stave) return;
+        var inside = clientY >= rect.top && clientY <= rect.bottom;
         var top = yFor(stave, 18) - 8;
         var bottom = yFor(stave, -10) + 8;
         if (p.y < top) p = { x: p.x, y: top };
         if (p.y > bottom) p = { x: p.x, y: bottom };
         var spacing = stave.getSpacingBetweenLines() || 10;
         var pos = BN.music.clampPos(Math.round(2 * ((stave.getYForNote(0) - p.y) / spacing - 1)));
-        /* getYForNote(0) is one step below the bottom line (pos 0 → note line 1). */
         var slots = box.slots[staff] || [];
         var noteHit = null;
         slots.forEach(function (slot) {
-          var midX = slot.x + slot.w / 2;
-          if (Math.abs(p.x - midX) <= Math.max(4, slot.w * 0.28)) noteHit = slot;
+          var midX = slot.headX != null ? slot.headX + 5 : slot.x + slot.w / 2;
+          if (Math.abs(p.x - midX) <= 9) noteHit = slot;
         });
-        var lastSlot = slots[slots.length - 1];
-        if (lastSlot && p.x > lastSlot.x + lastSlot.w * 0.55) noteHit = null;
         var insertAt = slots.length;
-        slots.forEach(function (slot, i) {
-          if (!noteHit && p.x < slot.x) insertAt = Math.min(insertAt, i);
-        });
+        var pastLast = slots.length && p.x > slots[slots.length - 1].headX + 14;
+        if (!pastLast) {
+          for (var i = 0; i < slots.length; i++) {
+            if (noteHit ? slots[i] === noteHit : p.x < slots[i].headX + 5) { insertAt = i; break; }
+          }
+        }
         var cy = (rect.top + rect.bottom) / 2;
-        var dist = Math.abs(clientY - cy);
+        var dist = Math.abs(clientY - cy) + (inside ? 0 : 1000);
         if (dist < bestDist) {
           bestDist = dist;
-          best = { measure: box.index, staff: staff, pos: pos, noteId: noteHit && noteHit.id, insertAt: insertAt, svg: p };
+          best = { measure: box.index, staff: staff, pos: pos, noteId: noteHit && noteHit.id, insertAt: insertAt, svg: p, inside: inside, system: box.system };
         }
       });
       return best;
