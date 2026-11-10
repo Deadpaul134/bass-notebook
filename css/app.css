@@ -107,6 +107,23 @@ h1, h2 { margin: 0; font-weight: 800; }
   font-weight: 700;
 }
 .icon-btn { display: inline-grid; place-items: center; text-decoration: none; padding: 0 12px; }
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  min-width: auto;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line2);
+  background: var(--card);
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.share-btn svg { width: 18px; height: 18px; }
+.share-btn:hover { border-color: var(--accent); color: var(--accent); }
 .text-btn, #pop button, .toast button { padding: 10px 16px; }
 .fab {
   position: fixed;
