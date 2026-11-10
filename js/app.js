@@ -19,6 +19,37 @@
     localStorage.setItem(BN.KEYS.theme, choice);
   }
   function themeLabel() { return pref() === "dark" ? "☾" : pref() === "system" ? "אוטו" : "☀︎"; }
+  var SHARE = {
+    url: "https://deadpaul134.github.io/bass-notebook/",
+    title: "מחברת בס",
+    text: "מחברת בס – מחברת תווים לטאבלט, בעברית, שעובדת גם בלי אינטרנט."
+  };
+  function shareIcon() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>';
+  }
+  function copyShareUrl(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(url);
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement("textarea");
+      ta.value = url;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      try { if (document.execCommand("copy")) resolve(); else reject(new Error("copy failed")); }
+      catch (e) { reject(e); }
+      document.body.removeChild(ta);
+    });
+  }
+  function shareApp() {
+    var payload = { title: SHARE.title, text: SHARE.text, url: SHARE.url };
+    var p = navigator.share ? navigator.share(payload) : Promise.reject(new Error("no-share"));
+    return p.catch(function (err) {
+      if (err && err.name === "AbortError") return;
+      return copyShareUrl(SHARE.url).then(function () { toast("הקישור הועתק"); });
+    });
+  }
   function cycleTheme() {
     var order = ["light", "dark", "system"];
     applyTheme(order[(Math.max(0, order.indexOf(pref())) + 1) % 3]);
@@ -72,7 +103,7 @@
     BN.state.current = null;
     var rows = BN.list.sort(BN.list.filter(BN.store.list(), query), sortMode);
     $("#app").innerHTML =
-      '<main class="screen" data-screen="list"><header class="top"><h1>המחברת שלי</h1><a class="icon-btn" href="#settings" aria-label="הגדרות">⚙</a><button type="button" class="icon-btn" data-action="theme" aria-label="ערכת צבע">' + themeLabel() + '</button></header>' +
+      '<main class="screen" data-screen="list"><header class="top"><h1>המחברת שלי</h1><button type="button" class="share-btn" data-action="share" aria-label="שתף קישור למחברת בס">' + shareIcon() + '<span>שתף</span></button><a class="icon-btn" href="#settings" aria-label="הגדרות">⚙</a><button type="button" class="icon-btn" data-action="theme" aria-label="ערכת צבע">' + themeLabel() + '</button></header>' +
       '<div class="filters"><input id="search" class="field" placeholder="חיפוש לפי שם, תגית, הערה או סולם" value="' + BN.esc(query) + '"><select id="sort" class="field" aria-label="מיון"><option value="updated">עודכן לאחרונה</option><option value="date">תאריך</option><option value="name">שם</option></select></div>' +
       '<section class="ideas">' + (rows.map(card).join("") || '<p class="empty">עוד אין רעיונות. הראשון מחכה לכפתור למטה.</p>') + "</section>" +
       '<button type="button" class="fab" data-action="new-score">＋ רעיון חדש</button>' +
@@ -330,7 +361,7 @@
   function renderSettings() {
     var s = BN.data.settings();
     $("#app").innerHTML =
-      '<main class="screen" data-screen="settings"><header class="top"><a class="icon-btn" href="#list" aria-label="חזרה">→</a><h1>הגדרות</h1><button type="button" class="icon-btn" data-action="theme">' + themeLabel() + "</button></header>" +
+      '<main class="screen" data-screen="settings"><header class="top"><a class="icon-btn" href="#list" aria-label="חזרה">→</a><h1>הגדרות</h1><button type="button" class="share-btn" data-action="share" aria-label="שתף קישור למחברת בס">' + shareIcon() + '<span>שתף</span></button><button type="button" class="icon-btn" data-action="theme">' + themeLabel() + "</button></header>" +
       '<section class="card"><h2>מראה</h2><p>ערכת הצבע הנוכחית: ' + BN.esc(pref()) + '</p>' +
       '<label class="check">מפתח לרעיון חדש <select id="set-clef"><option value="bass">פה</option><option value="treble">סול</option><option value="grand">כפול</option></select></label>' +
       '<label class="check">יד דומיננטית <select id="set-hand"><option value="right">ימין</option><option value="left">שמאל</option></select></label></section>' +
@@ -409,6 +440,7 @@
     }
     var action = btn.dataset.action;
     if (action === "theme") cycleTheme();
+    if (action === "share") shareApp();
     if (action === "new-score") {
       var menu = $("#new-menu");
       if (menu) menu.hidden = !menu.hidden;
